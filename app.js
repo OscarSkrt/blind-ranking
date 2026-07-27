@@ -251,7 +251,7 @@
     document.getElementById('name-you').value = names.you;
     document.getElementById('name-friend').value = names.friend;
     // restore paste areas if we have raw text cached? we only store parsed, so leave blank.
-    renderCategories();
+    renderQueryBuilder();
   }
 
   slots.forEach(slot => {
@@ -294,40 +294,69 @@
       names.you = document.getElementById('name-you').value.trim() || 'You';
       names.friend = document.getElementById('name-friend').value.trim() || 'Friend';
       saveJSON(LS_NAMES, names);
-      renderCategories();
+      renderQueryBuilder();
     }, 300));
   });
 
-  function getCategories() {
-    const combined365 = combine(lists.you365, lists.friend365);
-    const combinedAll = combine(lists.youAll, lists.friendAll);
-    const combinedEverything = combine(combined365, combinedAll);
-    return [
-      { id: 'you365', title: `${names.you} — Last 365 days`, tracks: lists.you365 },
-      { id: 'youAll', title: `${names.you} — All-time`, tracks: lists.youAll },
-      { id: 'friend365', title: `${names.friend} — Last 365 days`, tracks: lists.friend365 },
-      { id: 'friendAll', title: `${names.friend} — All-time`, tracks: lists.friendAll },
-      { id: 'combined365', title: `Combined — Last 365 days`, tracks: combined365 },
-      { id: 'combinedAll', title: `Combined — All-time`, tracks: combinedAll },
-      { id: 'top100', title: `Top 100 — Combined all-time`, tracks: combinedAll.slice(0, 100) },
-      { id: 'top1000', title: `Top 1000 — Combined all-time`, tracks: combinedAll.slice(0, 1000) },
-      { id: 'combinedEverything', title: `Combined — Everything`, tracks: combinedEverything },
-    ];
+  function buildList(who, period) {
+    if (period === '365') {
+      if (who === 'you') return lists.you365;
+      if (who === 'friend') return lists.friend365;
+      return combine(lists.you365, lists.friend365);
+    }
+    if (period === 'all') {
+      if (who === 'you') return lists.youAll;
+      if (who === 'friend') return lists.friendAll;
+      return combine(lists.youAll, lists.friendAll);
+    }
+    // 'everything' — both periods merged
+    if (who === 'you') return combine(lists.you365, lists.youAll);
+    if (who === 'friend') return combine(lists.friend365, lists.friendAll);
+    return combine(combine(lists.you365, lists.friend365), combine(lists.youAll, lists.friendAll));
   }
 
-  function renderCategories() {
-    const grid = document.getElementById('category-grid');
-    grid.innerHTML = '';
-    getCategories().forEach(cat => {
-      const btn = document.createElement('button');
-      btn.className = 'category-card';
-      btn.type = 'button';
-      btn.disabled = cat.tracks.length === 0;
-      btn.innerHTML = `<span class="cc-title">${escapeHtml(cat.title)}</span><span class="cc-count">${cat.tracks.length} tracks</span>`;
-      btn.addEventListener('click', () => startGame(cat));
-      grid.appendChild(btn);
-    });
+  function buildCategory(who, period, topN) {
+    const full = buildList(who, period);
+    const tracks = topN === 'all' ? full : full.slice(0, parseInt(topN, 10));
+    const whoLabel = who === 'you' ? names.you : who === 'friend' ? names.friend : 'Combined';
+    const periodLabel = period === '365' ? 'Last 365 days' : period === 'all' ? 'All-time' : 'Everything';
+    const topLabel = topN === 'all' ? 'All tracks' : `Top ${topN}`;
+    return { id: `${who}-${period}-${topN}`, title: `${whoLabel} — ${periodLabel} — ${topLabel}`, tracks, fullCount: full.length };
   }
+
+  function renderQueryBuilder() {
+    const whoSelect = document.getElementById('qb-who');
+    whoSelect.options[0].textContent = names.you;
+    whoSelect.options[1].textContent = names.friend;
+
+    const who = whoSelect.value;
+    const period = document.getElementById('qb-period').value;
+    const topN = document.getElementById('qb-topn').value;
+    const cat = buildCategory(who, period, topN);
+    const countEl = document.getElementById('qb-count');
+    const startBtn = document.getElementById('btn-start-session');
+
+    if (cat.fullCount === 0) {
+      countEl.textContent = 'No tracks loaded for this selection yet — load lists in Step 1 above.';
+      startBtn.disabled = true;
+    } else {
+      countEl.textContent = `${cat.tracks.length} of ${cat.fullCount} available tracks will be used.`;
+      startBtn.disabled = false;
+    }
+  }
+
+  ['qb-who', 'qb-period', 'qb-topn'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderQueryBuilder);
+  });
+
+  document.getElementById('btn-start-session').addEventListener('click', () => {
+    const who = document.getElementById('qb-who').value;
+    const period = document.getElementById('qb-period').value;
+    const topN = document.getElementById('qb-topn').value;
+    const cat = buildCategory(who, period, topN);
+    if (cat.tracks.length === 0) return;
+    startGame(cat);
+  });
 
   function escapeHtml(str) {
     const div = document.createElement('div');
