@@ -87,12 +87,59 @@
 
   const slots = ['you365', 'youAll', 'friend365', 'friendAll'];
 
+  /* ============ Auto-load from repo's data/ folder ============ */
+  const REPO_FILES = {
+    you365: 'data/you-365.txt',
+    youAll: 'data/you-alltime.txt',
+    friend365: 'data/friend-365.txt',
+    friendAll: 'data/friend-alltime.txt',
+  };
+  // tracks whether each slot's current list came from the repo or a manual upload/paste this session
+  const sources = { you365: null, youAll: null, friend365: null, friendAll: null };
+
+  async function loadRepoFile(slot) {
+    try {
+      const res = await fetch(REPO_FILES[slot] + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return false;
+      const text = await res.text();
+      const parsed = parseLines(text);
+      if (parsed.length === 0) return false;
+      lists[slot] = parsed;
+      sources[slot] = 'repo';
+      saveJSON(LS_LISTS, lists);
+      return true;
+    } catch (e) {
+      return false; // e.g. opened via file:// with no server, or file not committed yet
+    }
+  }
+
+  async function loadAllRepoFiles({ silent } = {}) {
+    const statusEl = document.getElementById('repo-status');
+    if (!silent && statusEl) statusEl.textContent = 'Checking data/ folder…';
+    const results = await Promise.all(slots.map(loadRepoFile));
+    const foundCount = results.filter(Boolean).length;
+    if (statusEl) {
+      statusEl.textContent = foundCount > 0
+        ? `Loaded ${foundCount}/4 files from data/.`
+        : `No files found in data/ yet — commit them there, or upload/paste below for now.`;
+    }
+    refreshUploadUI();
+  }
+
+  document.getElementById('btn-reload-repo').addEventListener('click', () => loadAllRepoFiles());
+
   /* ============ Setup screen wiring ============ */
   function refreshUploadUI() {
     slots.forEach(slot => {
       const count = lists[slot] ? lists[slot].length : 0;
       const el = document.getElementById('count-' + slot);
-      el.textContent = count > 0 ? count + ' tracks loaded' : 'no file loaded';
+      if (count === 0) {
+        el.textContent = 'no file loaded';
+      } else if (sources[slot] === 'repo') {
+        el.textContent = `${count} tracks (from repo)`;
+      } else {
+        el.textContent = `${count} tracks (uploaded this session)`;
+      }
     });
     document.getElementById('name-you').value = names.you;
     document.getElementById('name-friend').value = names.friend;
@@ -111,6 +158,7 @@
       reader.onload = () => {
         const parsed = parseLines(String(reader.result));
         lists[slot] = parsed;
+        sources[slot] = 'manual';
         saveJSON(LS_LISTS, lists);
         pasteArea.value = '';
         refreshUploadUI();
@@ -122,6 +170,7 @@
       const parsed = parseLines(pasteArea.value);
       if (parsed.length > 0) {
         lists[slot] = parsed;
+        sources[slot] = 'manual';
         saveJSON(LS_LISTS, lists);
         refreshUploadUI();
       }
@@ -415,5 +464,6 @@
   });
 
   /* ============ Init ============ */
-  refreshUploadUI();
+  refreshUploadUI(); // paint immediately from whatever's cached in localStorage
+  loadAllRepoFiles({ silent: true }); // then try the repo's data/ folder, which wins if present
 })();
