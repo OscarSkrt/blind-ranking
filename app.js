@@ -336,7 +336,7 @@
   }
 
   /* ============ Game state ============ */
-  let game = null; // { categoryId, categoryTitle, queue: [...], index, results: [] }
+  let game = null; // { categoryId, categoryTitle, queue: [...], index, positions: [10 x (null|{artist,track})] }
 
   function shuffle(arr) {
     const a = arr.slice();
@@ -353,7 +353,7 @@
       categoryTitle: cat.title,
       queue: shuffle(cat.tracks),
       index: 0,
-      results: [],
+      positions: new Array(10).fill(null),
     };
     showScreen('game');
     document.getElementById('category-label').textContent = cat.title;
@@ -362,24 +362,46 @@
 
   const recordBtn = document.getElementById('record');
   const revealHint = document.getElementById('reveal-hint');
-  const ratingPanel = document.getElementById('rating-panel');
-  const meterValue = document.getElementById('meter-value');
+  const skipBtn = document.getElementById('btn-skip');
+  const ytEmbed = document.getElementById('yt-embed');
+  const ytStatus = document.getElementById('yt-status');
+
+  function filledCount() {
+    return game.positions.filter(Boolean).length;
+  }
+
+  function renderRankList(clickable) {
+    const list = document.getElementById('rank-list');
+    list.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      const slot = game.positions[i];
+      const li = document.createElement('li');
+      li.className = 'rank-row' + (slot ? ' filled' : (clickable ? ' clickable' : ''));
+      if (slot) {
+        li.innerHTML = `<span class="rank-num">${i + 1}</span><span class="rank-info"><span class="rank-artist">${escapeHtml(slot.artist)}</span><span class="rank-track">${escapeHtml(slot.track)}</span></span>`;
+      } else {
+        li.innerHTML = `<span class="rank-num">${i + 1}</span><span class="rank-placeholder">${clickable ? 'Place here' : '—'}</span>`;
+        if (clickable) li.addEventListener('click', () => onPlace(i));
+      }
+      list.appendChild(li);
+    }
+  }
 
   function renderCurrentTrack() {
-    const total = game.queue.length;
-    const pos = game.index + 1;
-    document.getElementById('progress-label').textContent =
-      `Track ${String(pos).padStart(2, '0')} / ${total}`;
-    document.getElementById('progress-fill').style.width = `${(game.index / total) * 100}%`;
+    const filled = filledCount();
+    document.getElementById('progress-label').textContent = `${filled}/10 picked`;
+    document.getElementById('progress-fill').style.width = `${(filled / 10) * 100}%`;
 
     recordBtn.classList.remove('revealed');
-    ratingPanel.classList.add('hidden');
     revealHint.textContent = 'Click the record to reveal';
     revealHint.style.display = '';
     document.getElementById('record-artist').textContent = '';
     document.getElementById('record-track').textContent = '';
-    meterValue.textContent = '—';
-    buildMeter(null);
+    skipBtn.classList.add('hidden');
+    ytEmbed.classList.add('hidden');
+    ytEmbed.innerHTML = '';
+    ytStatus.textContent = '';
+    renderRankList(false);
   }
 
   recordBtn.addEventListener('click', () => {
@@ -389,68 +411,109 @@
     document.getElementById('record-artist').textContent = current.artist;
     document.getElementById('record-track').textContent = current.track;
     revealHint.style.display = 'none';
-    ratingPanel.classList.remove('hidden');
+    skipBtn.classList.remove('hidden');
+    renderRankList(true);
+    maybeLoadYoutube(current);
   });
 
-  function buildMeter(selected) {
-    const meter = document.getElementById('meter');
-    meter.innerHTML = '';
-    for (let i = 1; i <= 10; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'meter-bar';
-      bar.style.height = `${18 + i * 5}px`;
-      bar.textContent = i;
-      bar.dataset.val = i;
-      if (selected !== null && i <= selected) {
-        bar.classList.add('lit');
-        if (i >= 8) bar.classList.add('high');
-      }
-      bar.addEventListener('click', () => onRate(i));
-      meter.appendChild(bar);
-    }
-  }
-
-  function onRate(score) {
-    buildMeter(score);
-    meterValue.textContent = score + ' / 10';
+  function onPlace(i) {
     const current = game.queue[game.index];
-    game.results.push({ artist: current.artist, track: current.track, rating: score });
-
+    game.positions[i] = { artist: current.artist, track: current.track };
+    renderRankList(false);
+    skipBtn.classList.add('hidden');
     setTimeout(() => {
       game.index++;
-      if (game.index >= game.queue.length) {
+      if (filledCount() >= 10 || game.index >= game.queue.length) {
         finishGame();
       } else {
         renderCurrentTrack();
       }
-    }, 450);
+    }, 400);
   }
+
+  skipBtn.addEventListener('click', () => {
+    game.index++;
+    if (game.index >= game.queue.length) {
+      finishGame();
+    } else {
+      renderCurrentTrack();
+    }
+  });
 
   document.getElementById('btn-end-early').addEventListener('click', () => {
     if (!game) return;
-    if (game.results.length === 0) {
+    if (filledCount() === 0) {
       showScreen('setup');
       return;
     }
-    if (confirm('End this session now? Songs not yet rated will be left out of the results.')) {
+    if (confirm('End this session now? Empty chart positions will be left blank.')) {
       finishGame();
     }
   });
 
   function finishGame() {
-    const complete = game.index >= game.queue.length;
+    const filled = filledCount();
     const entry = {
       categoryId: game.categoryId,
       categoryTitle: game.categoryTitle,
       date: new Date().toISOString(),
-      complete,
-      ratedCount: game.results.length,
-      totalCount: game.queue.length,
-      results: game.results.slice().sort((a, b) => b.rating - a.rating || a.artist.localeCompare(b.artist)),
+      chartFull: filled >= 10,
+      filledCount: filled,
+      reviewedCount: game.index,
+      results: game.positions
+        .map((slot, i) => (slot ? { position: i + 1, artist: slot.artist, track: slot.track } : null))
+        .filter(Boolean),
     };
     history.unshift(entry);
     saveJSON(LS_HISTORY, history);
     renderResults(entry);
+  }
+
+  /* ============ YouTube live-fetch (client-side, standard CORS-friendly fetch) ============ */
+  const LS_YT_APIKEY = 'blindspin.youtube.apikey.v1';
+  const LS_YT_CACHE = 'blindspin.youtube.cache.v1';
+  let ytCache = loadJSON(LS_YT_CACHE, {});
+
+  async function maybeLoadYoutube(currentTrack) {
+    const apiKey = document.getElementById('youtube-apikey').value.trim();
+    if (!apiKey) return;
+    const query = `${currentTrack.artist} ${currentTrack.track}`;
+    const cacheKey = query.toLowerCase();
+    ytStatus.textContent = 'Looking up video…';
+    try {
+      let videoId = ytCache[cacheKey];
+      if (videoId === undefined) {
+        videoId = await fetchYoutubeVideoId(query, apiKey);
+        ytCache[cacheKey] = videoId; // cache the miss (null) too, to avoid re-querying
+        saveJSON(LS_YT_CACHE, ytCache);
+      }
+      if (videoId) {
+        ytEmbed.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+        ytEmbed.classList.remove('hidden');
+        ytStatus.textContent = '';
+      } else {
+        ytStatus.textContent = 'No YouTube match found.';
+      }
+    } catch (e) {
+      ytStatus.textContent = `YouTube lookup failed — ${e.message}`;
+    }
+  }
+
+  async function fetchYoutubeVideoId(query, apiKey) {
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+    const item = data.items && data.items[0];
+    return (item && item.id && item.id.videoId) || null;
+  }
+
+  document.getElementById('youtube-apikey').addEventListener('input', debounce(() => {
+    saveJSON(LS_YT_APIKEY, document.getElementById('youtube-apikey').value.trim());
+  }, 400));
+
+  function initYoutubeField() {
+    document.getElementById('youtube-apikey').value = loadJSON(LS_YT_APIKEY, '');
   }
 
   /* ============ Results screen ============ */
@@ -459,8 +522,9 @@
   function renderResults(entry) {
     currentResultsEntry = entry;
     document.getElementById('results-title').textContent = entry.categoryTitle;
-    document.getElementById('results-eyebrow').textContent =
-      entry.complete ? 'Session complete' : `Ended early — ${entry.ratedCount}/${entry.totalCount} rated`;
+    document.getElementById('results-eyebrow').textContent = entry.chartFull
+      ? 'Top 10 complete'
+      : `Ended early — ${entry.filledCount}/10 filled (${entry.reviewedCount} songs reviewed)`;
 
     const list = document.getElementById('results-list');
     list.innerHTML = '';
@@ -471,7 +535,7 @@
           <div class="r-artist">${escapeHtml(r.artist)}</div>
           <div class="r-track">${escapeHtml(r.track)}</div>
         </div>
-        <div class="r-score">${r.rating}</div>
+        <div class="r-score">#${r.position}</div>
       `;
       list.appendChild(li);
     });
@@ -485,9 +549,9 @@
 
   document.getElementById('btn-export-csv').addEventListener('click', () => {
     if (!currentResultsEntry) return;
-    let csv = 'rank,artist,track,rating\n';
-    currentResultsEntry.results.forEach((r, i) => {
-      csv += `${i + 1},"${r.artist.replace(/"/g, '""')}","${r.track.replace(/"/g, '""')}",${r.rating}\n`;
+    let csv = 'position,artist,track\n';
+    currentResultsEntry.results.forEach(r => {
+      csv += `${r.position},"${r.artist.replace(/"/g, '""')}","${r.track.replace(/"/g, '""')}"\n`;
     });
     downloadFile(csv, sanitizeFilename(currentResultsEntry.categoryTitle) + '.csv', 'text/csv');
   });
@@ -500,7 +564,7 @@
   document.getElementById('btn-copy').addEventListener('click', async () => {
     if (!currentResultsEntry) return;
     const text = currentResultsEntry.results
-      .map((r, i) => `${i + 1}. ${r.artist} — ${r.track} (${r.rating}/10)`)
+      .map(r => `${r.position}. ${r.artist} — ${r.track}`)
       .join('\n');
     try {
       await navigator.clipboard.writeText(text);
@@ -550,7 +614,7 @@
       div.innerHTML = `
         <div>
           <div class="hi-cat">${escapeHtml(entry.categoryTitle)}</div>
-          <div class="hi-meta">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${entry.ratedCount}/${entry.totalCount} rated${entry.complete ? '' : ' (ended early)'}</div>
+          <div class="hi-meta">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${entry.filledCount}/10 filled${entry.chartFull ? '' : ' (ended early)'}</div>
         </div>
       `;
       div.addEventListener('click', () => renderResults(entry));
@@ -566,6 +630,9 @@
     localStorage.removeItem(LS_HISTORY);
     localStorage.removeItem(LS_APIKEY);
     localStorage.removeItem(LS_LFM_USERS);
+    localStorage.removeItem(LS_YT_APIKEY);
+    localStorage.removeItem(LS_YT_CACHE);
+    ytCache = {};
     lists = { you365: [], youAll: [], friend365: [], friendAll: [] };
     names = { you: 'You', friend: 'Friend' };
     history = [];
@@ -577,12 +644,14 @@
     document.getElementById('lastfm-apikey').value = (window.BLINDSPIN_CONFIG && window.BLINDSPIN_CONFIG.lastfmApiKey) || '';
     document.getElementById('lastfm-you').value = '';
     document.getElementById('lastfm-friend').value = '';
+    document.getElementById('youtube-apikey').value = '';
     refreshUploadUI();
     showScreen('setup');
   });
 
   /* ============ Init ============ */
   initLastfmFields();
+  initYoutubeField();
   refreshUploadUI(); // paint immediately from whatever's cached in localStorage
   loadAllRepoFiles({ silent: true }); // then try the repo's data/ folder, which wins if present
 })();
