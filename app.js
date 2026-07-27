@@ -393,6 +393,11 @@
   const revealHint = document.getElementById('reveal-hint');
   const skipBtn = document.getElementById('btn-skip');
   const albumArt = document.getElementById('album-art');
+  const albumArtPlaceholder = document.getElementById('album-art-placeholder');
+  albumArt.addEventListener('error', () => {
+    albumArt.classList.remove('has-src');
+    albumArtPlaceholder.classList.remove('hidden');
+  });
   const ytEmbed = document.getElementById('yt-embed');
   const ytStatus = document.getElementById('yt-status');
 
@@ -428,8 +433,9 @@
     document.getElementById('record-artist').textContent = '';
     document.getElementById('record-track').textContent = '';
     skipBtn.classList.add('hidden');
-    albumArt.classList.add('hidden');
+    albumArt.classList.remove('has-src');
     albumArt.src = '';
+    albumArtPlaceholder.classList.remove('hidden');
     ytEmbed.classList.add('hidden');
     ytEmbed.innerHTML = '';
     ytStatus.textContent = '';
@@ -567,10 +573,12 @@
   function showMedia(media) {
     if (media.art) {
       albumArt.src = media.art;
-      albumArt.classList.remove('hidden');
+      albumArt.classList.add('has-src');
+      albumArtPlaceholder.classList.add('hidden');
     } else {
-      albumArt.classList.add('hidden');
+      albumArt.classList.remove('has-src');
       albumArt.src = '';
+      albumArtPlaceholder.classList.remove('hidden');
     }
     if (media.videoId) {
       // start=60 skips the first minute, past most music-video intros
