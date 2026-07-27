@@ -56,6 +56,17 @@
       <p class="lf-note">Your key and usernames are only stored in this browser and sent directly to last.fm — nothing passes through a server. Anyone can grab their own key and use this app the same way.</p>
     </div>
 
+    <div class="lastfm-panel yt-panel">
+      <div class="lastfm-row">
+        <label class="lf-field">
+          <span class="lf-label">YouTube API key (optional)</span>
+          <input type="text" id="youtube-apikey" class="lf-input" placeholder="paste your key to auto-play videos on reveal">
+        </label>
+        <a class="lf-get-key" href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Get a free key →</a>
+      </div>
+      <p class="lf-note">Optional — if set, revealing a track also loads and plays its YouTube video so you can actually hear it. Free tier is capped at roughly 100 searches/day, so restrict the key to your site's URL under "API key restrictions" in Google Cloud Console, and expect it to run out on big sessions. Leave blank to skip this.</p>
+    </div>
+
     <details class="advanced">
       <summary>Advanced: load from files instead</summary>
 
@@ -144,32 +155,36 @@
     <div class="game-top">
       <button id="btn-end-early" class="ghost-btn" type="button">← End session</button>
       <div class="progress-wrap">
-        <span id="progress-label" class="progress-label">Track 01 / 40</span>
+        <span id="progress-label" class="progress-label">0/10 picked</span>
         <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
       </div>
       <span id="category-label" class="category-pill"></span>
     </div>
 
-    <div class="stage">
-      <button id="record" class="record" type="button" aria-label="Reveal this track">
-        <span class="record-groove"></span>
-        <span class="record-groove"></span>
-        <span class="record-groove"></span>
-        <span class="record-center">
-          <span id="record-hidden-text" class="record-hidden-text">?</span>
-          <span id="record-artist" class="record-artist"></span>
-          <span id="record-track" class="record-track"></span>
-        </span>
-      </button>
-      <p id="reveal-hint" class="reveal-hint">Click the record to reveal</p>
-    </div>
+    <div class="game-layout">
+      <div class="stage">
+        <button id="record" class="record" type="button" aria-label="Reveal this track">
+          <span class="record-groove"></span>
+          <span class="record-groove"></span>
+          <span class="record-groove"></span>
+          <span class="record-center">
+            <span id="record-hidden-text" class="record-hidden-text">?</span>
+            <span id="record-artist" class="record-artist"></span>
+            <span id="record-track" class="record-track"></span>
+          </span>
+        </button>
+        <p id="reveal-hint" class="reveal-hint">Click the record to reveal</p>
 
-    <div id="rating-panel" class="rating-panel hidden">
-      <p class="rating-instructions">Rate it 1–10</p>
-      <div id="meter" class="meter">
-        <!-- bars injected by JS -->
+        <div id="yt-embed" class="yt-embed hidden"></div>
+        <p id="yt-status" class="yt-status"></p>
+
+        <button id="btn-skip" class="ghost-btn skip-btn hidden" type="button">Skip this song →</button>
       </div>
-      <div class="meter-value" id="meter-value">—</div>
+
+      <div class="picks-panel">
+        <p class="picks-instructions">Your Top 10</p>
+        <ol id="rank-list" class="rank-list"></ol>
+      </div>
     </div>
   </section>
 
