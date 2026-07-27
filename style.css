@@ -239,7 +239,10 @@ code{
   font-size:.72rem; color:var(--muted); white-space:nowrap;
 }
 
-.stage{display:flex; flex-direction:column; align-items:center; margin:2rem 0 1rem;}
+.game-layout{display:grid; grid-template-columns:1fr 340px; gap:2.5rem; align-items:start; margin-top:1.5rem;}
+@media (max-width:820px){.game-layout{grid-template-columns:1fr;}}
+
+.stage{display:flex; flex-direction:column; align-items:center; margin:0.5rem 0 1rem;}
 
 .record{
   --size: 300px;
@@ -286,27 +289,45 @@ code{
 
 .reveal-hint{color:var(--muted); font-size:.8rem; margin-top:1.25rem; letter-spacing:.03em;}
 
-/* ===== Rating meter ===== */
-.rating-panel{margin-top:1.5rem; text-align:center; max-width:520px; margin-left:auto; margin-right:auto;}
-.rating-panel.hidden{display:none;}
-.rating-instructions{color:var(--muted); font-size:.8rem; margin-bottom:.9rem; letter-spacing:.05em; text-transform:uppercase;}
-.meter{display:flex; gap:5px; justify-content:center; align-items:flex-end; height:70px;}
-.meter-bar{
-  width:26px;
-  border-radius:3px 3px 0 0;
-  background:var(--surface-hi);
-  border:1px solid var(--border);
-  cursor:pointer;
-  transition:background .12s ease, transform .12s ease;
-  display:flex; align-items:flex-end; justify-content:center;
-  color:var(--muted);
-  font-size:.65rem;
-  padding-bottom:2px;
+/* ===== YouTube embed ===== */
+.yt-embed{width:100%; max-width:400px; margin-top:1.25rem; border-radius:8px; overflow:hidden; background:#000;}
+.yt-embed.hidden{display:none;}
+.yt-embed iframe{display:block; width:100%; aspect-ratio:16/9; border:0;}
+.yt-status{color:var(--muted); font-size:.72rem; margin:.5rem 0 0; min-height:1em;}
+
+.skip-btn{margin-top:1.25rem;}
+.skip-btn.hidden{display:none;}
+
+/* ===== Top 10 chart (doubles as "picked so far") ===== */
+.picks-panel{position:sticky; top:1.5rem;}
+.picks-instructions{
+  font-family:var(--font-display); font-weight:700; font-size:1rem;
+  margin:0 0 .8rem; color:var(--text);
 }
-.meter-bar:hover{transform:translateY(-2px);}
-.meter-bar.lit{background:linear-gradient(180deg, var(--gold), var(--gold-dim)); color:#14151a; border-color:var(--gold);}
-.meter-bar.lit.high{background:linear-gradient(180deg, var(--red), #7a2c36); border-color:var(--red); color:#f5e6e6;}
-.meter-value{font-family:var(--font-display); font-weight:700; font-size:1.6rem; margin-top:.8rem; color:var(--gold);}
+.rank-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.45rem;}
+.rank-row{
+  display:flex; align-items:center; gap:.75rem;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:7px;
+  padding:.55rem .8rem;
+  min-height:2.6rem;
+}
+.rank-num{
+  font-family:var(--font-display); font-weight:700; color:var(--muted);
+  min-width:1.5rem; text-align:center; font-size:.9rem; flex-shrink:0;
+}
+.rank-row.filled{background:var(--surface-hi); border-color:var(--gold-dim);}
+.rank-row.filled .rank-num{color:var(--gold);}
+.rank-info{display:flex; flex-direction:column; flex:1; min-width:0;}
+.rank-artist{font-family:var(--font-display); font-weight:700; font-size:.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rank-track{color:var(--muted); font-size:.7rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rank-placeholder{color:var(--muted); font-size:.75rem; opacity:.6;}
+.rank-row.clickable{cursor:pointer; border-style:dashed; border-color:var(--gold-dim);}
+.rank-row.clickable:hover{border-color:var(--gold); background:rgba(227,178,60,0.07);}
+.rank-row.clickable .rank-placeholder{color:var(--gold); opacity:1; font-style:normal;}
+
+/* ===== Game layout ===== */
 
 /* ===== Results ===== */
 .results-actions{display:flex; gap:.6rem; flex-wrap:wrap; margin:1.5rem 0 1.75rem;}
