@@ -128,6 +128,111 @@
 
   document.getElementById('btn-reload-repo').addEventListener('click', () => loadAllRepoFiles());
 
+  /* ============ Live fetch from last.fm (client-side, JSONP — no backend) ============ */
+  const LS_APIKEY = 'blindspin.lastfm.apikey.v1';
+  const LS_LFM_USERS = 'blindspin.lastfm.users.v1';
+
+  // JSONP: last.fm doesn't send CORS headers for fetch()/XHR, but it does support
+  // the classic ?callback= JSONP pattern, which works fine from a static page.
+  function jsonp(url) {
+    return new Promise((resolve, reject) => {
+      const cbName = 'lastfmCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const script = document.createElement('script');
+      const timeoutId = setTimeout(() => { cleanup(); reject(new Error('Request to last.fm timed out')); }, 15000);
+      function cleanup() {
+        delete window[cbName];
+        script.remove();
+        clearTimeout(timeoutId);
+      }
+      window[cbName] = (data) => { cleanup(); resolve(data); };
+      script.onerror = () => { cleanup(); reject(new Error('Network error contacting last.fm')); };
+      const sep = url.includes('?') ? '&' : '?';
+      script.src = url + sep + 'callback=' + cbName;
+      document.body.appendChild(script);
+    });
+  }
+
+  async function fetchTopTracks(username, period, apiKey, limit = 1000) {
+    let all = [];
+    let page = 1;
+    while (all.length < limit) {
+      const url = `https://ws.audioscrobbler.com/2.0/?method=user.gettoptracks&user=${encodeURIComponent(username)}&period=${period}&api_key=${encodeURIComponent(apiKey)}&format=json&limit=1000&page=${page}`;
+      const data = await jsonp(url);
+      if (data.error) throw new Error(data.message || `last.fm error ${data.error}`);
+      let tracks = (data.toptracks && data.toptracks.track) || [];
+      if (!Array.isArray(tracks)) tracks = [tracks];
+      if (tracks.length === 0) break;
+      all.push(...tracks);
+      const attr = (data.toptracks && data.toptracks['@attr']) || {};
+      const totalPages = parseInt(attr.totalPages || '1', 10);
+      if (page >= totalPages || page >= 5) break; // cap at 5 pages (~5000 tracks) as a safety limit
+      page++;
+    }
+    return all.slice(0, limit).map(t => ({
+      artist: (t.artist && (t.artist.name || t.artist['#text'])) || 'Unknown artist',
+      track: t.name,
+    }));
+  }
+
+  function setLastfmStatus(msg, isError) {
+    const el = document.getElementById('lastfm-status');
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--red)' : '';
+  }
+
+  function initLastfmFields() {
+    const configKey = (window.BLINDSPIN_CONFIG && window.BLINDSPIN_CONFIG.lastfmApiKey) || '';
+    const apiKey = loadJSON(LS_APIKEY, '') || configKey;
+    const users = loadJSON(LS_LFM_USERS, { you: '', friend: '' });
+    document.getElementById('lastfm-apikey').value = apiKey;
+    document.getElementById('lastfm-you').value = users.you;
+    document.getElementById('lastfm-friend').value = users.friend;
+  }
+
+  document.getElementById('btn-fetch-lastfm').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-fetch-lastfm');
+    const apiKey = document.getElementById('lastfm-apikey').value.trim();
+    const youUser = document.getElementById('lastfm-you').value.trim();
+    const friendUser = document.getElementById('lastfm-friend').value.trim();
+
+    if (!apiKey) { setLastfmStatus('Add a last.fm API key first — get one free at the link above.', true); return; }
+    if (!youUser && !friendUser) { setLastfmStatus('Enter at least one last.fm username.', true); return; }
+
+    saveJSON(LS_APIKEY, apiKey);
+    saveJSON(LS_LFM_USERS, { you: youUser, friend: friendUser });
+
+    const jobs = [];
+    if (youUser) { jobs.push(['you365', youUser, '12month']); jobs.push(['youAll', youUser, 'overall']); }
+    if (friendUser) { jobs.push(['friend365', friendUser, '12month']); jobs.push(['friendAll', friendUser, 'overall']); }
+
+    btn.disabled = true;
+    let successCount = 0;
+    let firstError = null;
+    for (const [slot, user, period] of jobs) {
+      setLastfmStatus(`Fetching ${successCount + 1}/${jobs.length} — ${user} (${period === 'overall' ? 'all-time' : 'last 365 days'})…`);
+      try {
+        const tracks = await fetchTopTracks(user, period, apiKey, 1000);
+        if (tracks.length === 0) throw new Error(`no tracks found for "${user}" — check the username`);
+        lists[slot] = dedupe(tracks);
+        sources[slot] = 'lastfm';
+        successCount++;
+      } catch (e) {
+        firstError = e.message;
+      }
+    }
+    saveJSON(LS_LISTS, lists);
+    btn.disabled = false;
+    refreshUploadUI();
+
+    if (successCount === jobs.length) {
+      setLastfmStatus(`Loaded ${successCount} list${successCount > 1 ? 's' : ''} from last.fm.`);
+    } else if (successCount > 0) {
+      setLastfmStatus(`Loaded ${successCount}/${jobs.length} lists — ${firstError}`, true);
+    } else {
+      setLastfmStatus(`Couldn't load from last.fm — ${firstError}`, true);
+    }
+  });
+
   /* ============ Setup screen wiring ============ */
   function refreshUploadUI() {
     slots.forEach(slot => {
@@ -137,6 +242,8 @@
         el.textContent = 'no file loaded';
       } else if (sources[slot] === 'repo') {
         el.textContent = `${count} tracks (from repo)`;
+      } else if (sources[slot] === 'lastfm') {
+        el.textContent = `${count} tracks (from last.fm)`;
       } else {
         el.textContent = `${count} tracks (uploaded this session)`;
       }
@@ -457,15 +564,25 @@
     localStorage.removeItem(LS_LISTS);
     localStorage.removeItem(LS_NAMES);
     localStorage.removeItem(LS_HISTORY);
+    localStorage.removeItem(LS_APIKEY);
+    localStorage.removeItem(LS_LFM_USERS);
     lists = { you365: [], youAll: [], friend365: [], friendAll: [] };
     names = { you: 'You', friend: 'Friend' };
     history = [];
-    slots.forEach(slot => { document.getElementById('paste-' + slot).value = ''; document.getElementById('file-' + slot).value = ''; });
+    slots.forEach(slot => {
+      sources[slot] = null;
+      document.getElementById('paste-' + slot).value = '';
+      document.getElementById('file-' + slot).value = '';
+    });
+    document.getElementById('lastfm-apikey').value = (window.BLINDSPIN_CONFIG && window.BLINDSPIN_CONFIG.lastfmApiKey) || '';
+    document.getElementById('lastfm-you').value = '';
+    document.getElementById('lastfm-friend').value = '';
     refreshUploadUI();
     showScreen('setup');
   });
 
   /* ============ Init ============ */
+  initLastfmFields();
   refreshUploadUI(); // paint immediately from whatever's cached in localStorage
   loadAllRepoFiles({ silent: true }); // then try the repo's data/ folder, which wins if present
 })();
