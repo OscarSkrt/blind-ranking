@@ -266,7 +266,7 @@ select.lf-input:focus{outline:none; border-color:var(--gold);}
 .stage{display:flex; flex-direction:column; align-items:center; margin:0.5rem 0 1rem;}
 
 .record{
-  --size: 300px;
+  --size: 320px;
   width:var(--size); height:var(--size);
   border-radius:50%;
   background:radial-gradient(circle at 50% 50%, #0d0e11 0%, #0d0e11 8%, #17181d 9%, #17181d 30%, #0d0e11 31%, #0d0e11 52%, #17181d 53%, #17181d 74%, #0d0e11 75%);
@@ -285,12 +285,12 @@ select.lf-input:focus{outline:none; border-color:var(--gold);}
 .record.revealed:hover{box-shadow:0 20px 50px rgba(0,0,0,0.4);}
 
 .record-center{
-  width:38%; height:38%;
+  width:44%; height:44%;
   border-radius:50%;
   background:var(--gold);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   text-align:center;
-  padding:.5rem;
+  padding:.7rem;
   transition:transform .5s cubic-bezier(.2,.8,.2,1), background .3s ease;
   box-shadow: inset 0 0 0 6px #14151a, inset 0 0 0 7px var(--gold-dim);
 }
@@ -303,21 +303,37 @@ select.lf-input:focus{outline:none; border-color:var(--gold);}
   font-family:var(--font-display); font-weight:700; font-size:2rem; color:#14151a;
 }
 .record.revealed .record-hidden-text{display:none;}
-.record-artist{display:none; font-family:var(--font-display); font-weight:700; font-size:.85rem; color:var(--gold); line-height:1.3;}
-.record-track{display:none; font-family:var(--font-mono); font-size:.72rem; color:var(--text); line-height:1.35; margin-top:.25rem;}
+.record-artist{display:none; font-family:var(--font-display); font-weight:700; font-size:1.15rem; color:var(--gold); line-height:1.3;}
+.record-track{display:none; font-family:var(--font-mono); font-size:.92rem; color:var(--text); line-height:1.35; margin-top:.35rem;}
 .record.revealed .record-artist,
 .record.revealed .record-track{display:block;}
 
 .reveal-hint{color:var(--muted); font-size:.8rem; margin-top:1.25rem; letter-spacing:.03em;}
 
-/* ===== YouTube embed ===== */
-.album-art{
-  width:160px; height:160px; object-fit:cover;
-  border-radius:8px; margin-top:1.25rem;
+/* ===== Reveal row: album art + record, side by side ===== */
+.reveal-row{
+  display:flex; align-items:center; justify-content:center;
+  gap:1.75rem; flex-wrap:wrap;
+}
+@media (max-width:560px){.reveal-row{flex-direction:column;}}
+
+.album-art-wrap{
+  width:160px; height:160px; flex-shrink:0;
+  border-radius:8px;
+  background:var(--surface-hi);
   border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
   box-shadow:0 12px 28px rgba(0,0,0,0.35);
 }
-.album-art.hidden{display:none;}
+.album-art{width:100%; height:100%; object-fit:cover; display:none;}
+.album-art.has-src{display:block;}
+.album-art-placeholder{
+  font-size:2.75rem; color:var(--gold-dim); line-height:1;
+}
+.album-art-placeholder.hidden{display:none;}
+
+/* ===== YouTube embed ===== */
 .yt-embed{width:100%; max-width:400px; margin-top:1rem; border-radius:8px; overflow:hidden; background:#000;}
 .yt-embed.hidden{display:none;}
 .yt-embed iframe{display:block; width:100%; aspect-ratio:16/9; border:0;}
