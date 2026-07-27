@@ -198,7 +198,28 @@ code{
 .advanced summary:hover{color:var(--gold);}
 .advanced[open] summary{color:var(--gold); margin-bottom:.5rem;}
 
-/* ===== Category grid ===== */
+/* ===== Query builder (replaces fixed category grid) ===== */
+.query-builder{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:1.25rem 1.4rem;
+  margin-top:1.5rem;
+}
+.qb-row{display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; margin-bottom:1rem;}
+@media (max-width:720px){.qb-row{grid-template-columns:1fr;}}
+select.lf-input{
+  appearance:none;
+  -webkit-appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size:5px 5px, 5px 5px;
+  background-repeat:no-repeat;
+  cursor:pointer;
+}
+select.lf-input:focus{outline:none; border-color:var(--gold);}
+
+/* ===== Category grid (legacy, kept for potential future use) ===== */
 .category-grid{
   display:grid;
   grid-template-columns:repeat(3, 1fr);
