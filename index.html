@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blind Spin — song ranking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">◉</span>
+    <span class="brand-name">Blind Spin</span>
+  </div>
+  <div class="topbar-actions">
+    <button id="btn-history" class="ghost-btn" type="button">Past sessions</button>
+    <button id="btn-reset-all" class="ghost-btn danger" type="button">Clear all data</button>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ============ SCREEN 1: SETUP / UPLOAD ============ -->
+  <section id="screen-setup" class="screen active">
+    <div class="screen-head">
+      <p class="eyebrow">Step 1</p>
+      <h1>Load the crates</h1>
+      <p class="lede">Drop in last.fm exports for each person and time range. Plain text, one track per line — the parser handles "Artist - Track", tab-separated, or "Track by Artist" formats.</p>
+    </div>
+
+    <div class="upload-grid">
+      <div class="upload-card" data-slot="you365">
+        <div class="upload-card-head">
+          <span class="slot-tag">You</span>
+          <span class="slot-range">Last 365 days</span>
+        </div>
+        <label class="dropzone" for="file-you365">
+          <input type="file" id="file-you365" accept=".txt" hidden>
+          <span class="dz-label">Choose file</span>
+          <span class="dz-count" id="count-you365">no file loaded</span>
+        </label>
+        <textarea class="paste-area" id="paste-you365" placeholder="...or paste track list here, one per line"></textarea>
+      </div>
+
+      <div class="upload-card" data-slot="youAll">
+        <div class="upload-card-head">
+          <span class="slot-tag">You</span>
+          <span class="slot-range">All-time</span>
+        </div>
+        <label class="dropzone" for="file-youAll">
+          <input type="file" id="file-youAll" accept=".txt" hidden>
+          <span class="dz-label">Choose file</span>
+          <span class="dz-count" id="count-youAll">no file loaded</span>
+        </label>
+        <textarea class="paste-area" id="paste-youAll" placeholder="...or paste track list here, one per line"></textarea>
+      </div>
+
+      <div class="upload-card" data-slot="friend365">
+        <div class="upload-card-head">
+          <span class="slot-tag">Friend</span>
+          <span class="slot-range">Last 365 days</span>
+        </div>
+        <label class="dropzone" for="file-friend365">
+          <input type="file" id="file-friend365" accept=".txt" hidden>
+          <span class="dz-label">Choose file</span>
+          <span class="dz-count" id="count-friend365">no file loaded</span>
+        </label>
+        <textarea class="paste-area" id="paste-friend365" placeholder="...or paste track list here, one per line"></textarea>
+      </div>
+
+      <div class="upload-card" data-slot="friendAll">
+        <div class="upload-card-head">
+          <span class="slot-tag">Friend</span>
+          <span class="slot-range">All-time</span>
+        </div>
+        <label class="dropzone" for="file-friendAll">
+          <input type="file" id="file-friendAll" accept=".txt" hidden>
+          <span class="dz-label">Choose file</span>
+          <span class="dz-count" id="count-friendAll">no file loaded</span>
+        </label>
+        <textarea class="paste-area" id="paste-friendAll" placeholder="...or paste track list here, one per line"></textarea>
+      </div>
+    </div>
+
+    <p class="hint" id="names-hint">
+      Rename the players:
+      <input type="text" id="name-you" class="inline-name" value="You" maxlength="16">
+      &amp;
+      <input type="text" id="name-friend" class="inline-name" value="Friend" maxlength="16">
+    </p>
+
+    <div class="screen-head" style="margin-top:3rem;">
+      <p class="eyebrow">Step 2</p>
+      <h2>Pick a category to spin</h2>
+      <p class="lede">Combined categories merge both lists and drop duplicate tracks automatically.</p>
+    </div>
+
+    <div id="category-grid" class="category-grid"></div>
+
+  </section>
+
+  <!-- ============ SCREEN 2: GAME ============ -->
+  <section id="screen-game" class="screen">
+    <div class="game-top">
+      <button id="btn-end-early" class="ghost-btn" type="button">← End session</button>
+      <div class="progress-wrap">
+        <span id="progress-label" class="progress-label">Track 01 / 40</span>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+      <span id="category-label" class="category-pill"></span>
+    </div>
+
+    <div class="stage">
+      <button id="record" class="record" type="button" aria-label="Reveal this track">
+        <span class="record-groove"></span>
+        <span class="record-groove"></span>
+        <span class="record-groove"></span>
+        <span class="record-center">
+          <span id="record-hidden-text" class="record-hidden-text">?</span>
+          <span id="record-artist" class="record-artist"></span>
+          <span id="record-track" class="record-track"></span>
+        </span>
+      </button>
+      <p id="reveal-hint" class="reveal-hint">Click the record to reveal</p>
+    </div>
+
+    <div id="rating-panel" class="rating-panel hidden">
+      <p class="rating-instructions">Rate it 1–10</p>
+      <div id="meter" class="meter">
+        <!-- bars injected by JS -->
+      </div>
+      <div class="meter-value" id="meter-value">—</div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3: RESULTS ============ -->
+  <section id="screen-results" class="screen">
+    <div class="screen-head">
+      <p class="eyebrow" id="results-eyebrow">Session complete</p>
+      <h1 id="results-title">Results</h1>
+    </div>
+
+    <div class="results-actions">
+      <button id="btn-export-csv" class="ghost-btn" type="button">Export CSV</button>
+      <button id="btn-export-json" class="ghost-btn" type="button">Export JSON</button>
+      <button id="btn-copy" class="ghost-btn" type="button">Copy as text</button>
+      <button id="btn-play-again" class="primary-btn" type="button">Back to categories</button>
+    </div>
+
+    <ol id="results-list" class="results-list"></ol>
+  </section>
+
+  <!-- ============ SCREEN 4: HISTORY ============ -->
+  <section id="screen-history" class="screen">
+    <div class="screen-head">
+      <p class="eyebrow">Archive</p>
+      <h1>Past sessions</h1>
+    </div>
+    <div id="history-list" class="history-list"></div>
+    <button id="btn-history-back" class="ghost-btn" type="button">← Back</button>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
