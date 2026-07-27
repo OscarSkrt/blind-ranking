@@ -30,8 +30,38 @@
     <div class="screen-head">
       <p class="eyebrow">Step 1</p>
       <h1>Load the crates</h1>
-      <p class="lede">Drop in last.fm exports for each person and time range. Plain text, one track per line — the parser handles "Artist - Track", tab-separated, or "Track by Artist" formats.</p>
+      <p class="lede">Type a last.fm username and pull their top tracks straight from the API — no exporting, no files. Anyone with a last.fm account and a free API key can use this.</p>
     </div>
+
+    <div class="lastfm-panel">
+      <div class="lastfm-row">
+        <label class="lf-field">
+          <span class="lf-label">Your last.fm API key</span>
+          <input type="text" id="lastfm-apikey" class="lf-input" placeholder="paste your key">
+        </label>
+        <a class="lf-get-key" href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Get a free key →</a>
+      </div>
+      <div class="lastfm-row two-col">
+        <label class="lf-field">
+          <span class="lf-label">Your last.fm username</span>
+          <input type="text" id="lastfm-you" class="lf-input" placeholder="e.g. rj">
+        </label>
+        <label class="lf-field">
+          <span class="lf-label">Friend's last.fm username</span>
+          <input type="text" id="lastfm-friend" class="lf-input" placeholder="e.g. sander">
+        </label>
+      </div>
+      <button id="btn-fetch-lastfm" class="primary-btn" type="button">Pull top tracks from last.fm</button>
+      <p class="hint" id="lastfm-status"></p>
+      <p class="lf-note">Your key and usernames are only stored in this browser and sent directly to last.fm — nothing passes through a server. Anyone can grab their own key and use this app the same way.</p>
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced: load from files instead</summary>
+
+      <p class="lede" style="margin-top:1rem;">The site can also auto-load text files from the <code>data/</code> folder in this repo on page load, or you can upload/paste lists manually below. Either overrides the last.fm fetch for that slot.</p>
+      <button id="btn-reload-repo" class="ghost-btn" type="button" style="margin-top:.75rem;">↻ Reload data/ folder</button>
+      <p class="hint" id="repo-status"></p>
 
     <div class="upload-grid">
       <div class="upload-card" data-slot="you365">
@@ -39,6 +69,7 @@
           <span class="slot-tag">You</span>
           <span class="slot-range">Last 365 days</span>
         </div>
+        <code class="slot-file">data/you-365.txt</code>
         <label class="dropzone" for="file-you365">
           <input type="file" id="file-you365" accept=".txt" hidden>
           <span class="dz-label">Choose file</span>
@@ -52,6 +83,7 @@
           <span class="slot-tag">You</span>
           <span class="slot-range">All-time</span>
         </div>
+        <code class="slot-file">data/you-alltime.txt</code>
         <label class="dropzone" for="file-youAll">
           <input type="file" id="file-youAll" accept=".txt" hidden>
           <span class="dz-label">Choose file</span>
@@ -65,6 +97,7 @@
           <span class="slot-tag">Friend</span>
           <span class="slot-range">Last 365 days</span>
         </div>
+        <code class="slot-file">data/friend-365.txt</code>
         <label class="dropzone" for="file-friend365">
           <input type="file" id="file-friend365" accept=".txt" hidden>
           <span class="dz-label">Choose file</span>
@@ -78,6 +111,7 @@
           <span class="slot-tag">Friend</span>
           <span class="slot-range">All-time</span>
         </div>
+        <code class="slot-file">data/friend-alltime.txt</code>
         <label class="dropzone" for="file-friendAll">
           <input type="file" id="file-friendAll" accept=".txt" hidden>
           <span class="dz-label">Choose file</span>
@@ -86,6 +120,7 @@
         <textarea class="paste-area" id="paste-friendAll" placeholder="...or paste track list here, one per line"></textarea>
       </div>
     </div>
+    </details>
 
     <p class="hint" id="names-hint">
       Rename the players:
@@ -167,6 +202,7 @@
 
 </main>
 
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
