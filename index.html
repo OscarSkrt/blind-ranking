@@ -142,11 +142,45 @@
 
     <div class="screen-head" style="margin-top:3rem;">
       <p class="eyebrow">Step 2</p>
-      <h2>Pick a category to spin</h2>
-      <p class="lede">Combined categories merge both lists and drop duplicate tracks automatically.</p>
+      <h2>Build a session</h2>
+      <p class="lede">Mix and match — any person, any time range, any chart size.</p>
     </div>
 
-    <div id="category-grid" class="category-grid"></div>
+    <div class="query-builder">
+      <div class="qb-row">
+        <label class="lf-field">
+          <span class="lf-label">Whose tracks</span>
+          <select id="qb-who" class="lf-input">
+            <option value="you"></option>
+            <option value="friend"></option>
+            <option value="combined">Combined</option>
+          </select>
+        </label>
+        <label class="lf-field">
+          <span class="lf-label">Time period</span>
+          <select id="qb-period" class="lf-input">
+            <option value="365">Last 365 days</option>
+            <option value="all">All-time</option>
+            <option value="everything">Everything (both periods)</option>
+          </select>
+        </label>
+        <label class="lf-field">
+          <span class="lf-label">Number of top tracks</span>
+          <select id="qb-topn" class="lf-input">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+      </div>
+      <button id="btn-start-session" class="primary-btn" type="button">Start session</button>
+      <p class="hint" id="qb-count"></p>
+    </div>
 
   </section>
 
