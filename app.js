@@ -392,6 +392,7 @@
   const recordBtn = document.getElementById('record');
   const revealHint = document.getElementById('reveal-hint');
   const skipBtn = document.getElementById('btn-skip');
+  const albumArt = document.getElementById('album-art');
   const ytEmbed = document.getElementById('yt-embed');
   const ytStatus = document.getElementById('yt-status');
 
@@ -427,13 +428,20 @@
     document.getElementById('record-artist').textContent = '';
     document.getElementById('record-track').textContent = '';
     skipBtn.classList.add('hidden');
+    albumArt.classList.add('hidden');
+    albumArt.src = '';
     ytEmbed.classList.add('hidden');
     ytEmbed.innerHTML = '';
     ytStatus.textContent = '';
     renderRankList(false);
+
+    // Fetch this track's video/art now, in the background, while it's still hidden —
+    // by the time it's revealed the lookup is usually already done.
+    const upcoming = game.queue[game.index];
+    if (upcoming) prefetchTrackMedia(upcoming);
   }
 
-  recordBtn.addEventListener('click', () => {
+  recordBtn.addEventListener('click', async () => {
     if (recordBtn.classList.contains('revealed')) return;
     const current = game.queue[game.index];
     recordBtn.classList.add('revealed');
@@ -442,7 +450,19 @@
     revealHint.style.display = 'none';
     skipBtn.classList.remove('hidden');
     renderRankList(true);
-    maybeLoadYoutube(current);
+
+    const key = mediaCacheKey(current.artist, current.track);
+    if (mediaCache[key]) {
+      showMedia(mediaCache[key]);
+    } else {
+      // prefetch hasn't finished yet (revealed very fast) — fetch now
+      if (document.getElementById('youtube-apikey').value.trim() || document.getElementById('lastfm-apikey').value.trim()) {
+        ytStatus.textContent = 'Loading…';
+      }
+      const media = await prefetchTrackMedia(current);
+      // only apply if we're still looking at the same track (guards against fast skip/place)
+      if (game.queue[game.index] === current) showMedia(media);
+    }
   });
 
   function onPlace(i) {
@@ -498,33 +518,69 @@
     renderResults(entry);
   }
 
-  /* ============ YouTube live-fetch (client-side, standard CORS-friendly fetch) ============ */
+  /* ============ Media live-fetch: YouTube video + album art (client-side) ============ */
   const LS_YT_APIKEY = 'blindspin.youtube.apikey.v1';
-  const LS_YT_CACHE = 'blindspin.youtube.cache.v1';
-  let ytCache = loadJSON(LS_YT_CACHE, {});
+  const LS_MEDIA_CACHE = 'blindspin.media.cache.v1';
+  let mediaCache = loadJSON(LS_MEDIA_CACHE, {});
 
-  async function maybeLoadYoutube(currentTrack) {
-    const apiKey = document.getElementById('youtube-apikey').value.trim();
-    if (!apiKey) return;
-    const query = `${currentTrack.artist} ${currentTrack.track}`;
-    const cacheKey = query.toLowerCase();
-    ytStatus.textContent = 'Looking up video…';
-    try {
-      let videoId = ytCache[cacheKey];
-      if (videoId === undefined) {
-        videoId = await fetchYoutubeVideoId(query, apiKey);
-        ytCache[cacheKey] = videoId; // cache the miss (null) too, to avoid re-querying
-        saveJSON(LS_YT_CACHE, ytCache);
-      }
-      if (videoId) {
-        ytEmbed.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
-        ytEmbed.classList.remove('hidden');
-        ytStatus.textContent = '';
-      } else {
-        ytStatus.textContent = 'No YouTube match found.';
-      }
-    } catch (e) {
-      ytStatus.textContent = `YouTube lookup failed — ${e.message}`;
+  function mediaCacheKey(artist, track) {
+    return (artist + ' — ' + track).toLowerCase();
+  }
+
+  // Looks up (and caches) the YouTube video + album art for one track. Safe to call
+  // early/in the background — results just sit in the cache until reveal needs them.
+  async function prefetchTrackMedia(t) {
+    const key = mediaCacheKey(t.artist, t.track);
+    if (mediaCache[key]) return mediaCache[key];
+
+    const ytKey = document.getElementById('youtube-apikey').value.trim();
+    const lastfmKey = document.getElementById('lastfm-apikey').value.trim();
+    const media = { videoId: null, art: null };
+
+    const jobs = [];
+    if (ytKey) {
+      jobs.push(
+        fetchYoutubeVideoId(`${t.artist} ${t.track}`, ytKey)
+          .then(id => { media.videoId = id; })
+          .catch(() => {})
+      );
+    }
+    if (lastfmKey) {
+      jobs.push(
+        fetchAlbumArt(t.artist, t.track, lastfmKey)
+          .then(url => { media.art = url; })
+          .catch(() => {})
+      );
+    }
+    await Promise.all(jobs);
+
+    // last.fm art is often missing/placeholder — fall back to the YouTube thumbnail, if we have one
+    if (!media.art && media.videoId) {
+      media.art = `https://img.youtube.com/vi/${media.videoId}/hqdefault.jpg`;
+    }
+
+    mediaCache[key] = media;
+    saveJSON(LS_MEDIA_CACHE, mediaCache);
+    return media;
+  }
+
+  function showMedia(media) {
+    if (media.art) {
+      albumArt.src = media.art;
+      albumArt.classList.remove('hidden');
+    } else {
+      albumArt.classList.add('hidden');
+      albumArt.src = '';
+    }
+    if (media.videoId) {
+      // start=60 skips the first minute, past most music-video intros
+      ytEmbed.innerHTML = `<iframe src="https://www.youtube.com/embed/${media.videoId}?autoplay=1&start=60" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+      ytEmbed.classList.remove('hidden');
+      ytStatus.textContent = '';
+    } else {
+      ytEmbed.classList.add('hidden');
+      ytEmbed.innerHTML = '';
+      ytStatus.textContent = document.getElementById('youtube-apikey').value.trim() ? 'No YouTube match found.' : '';
     }
   }
 
@@ -535,6 +591,20 @@
     if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
     const item = data.items && data.items[0];
     return (item && item.id && item.id.videoId) || null;
+  }
+
+  // last.fm doesn't send CORS headers, so this goes through the same jsonp() helper as the top-tracks fetch
+  async function fetchAlbumArt(artist, track, apiKey) {
+    const url = `https://ws.audioscrobbler.com/2.0/?method=track.getinfo&api_key=${encodeURIComponent(apiKey)}&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(track)}&format=json`;
+    const data = await jsonp(url);
+    if (data.error) throw new Error(data.message || `last.fm error ${data.error}`);
+    const images = data.track && data.track.album && data.track.album.image;
+    if (!Array.isArray(images)) return null;
+    for (let i = images.length - 1; i >= 0; i--) {
+      const u = images[i] && images[i]['#text'];
+      if (u) return u; // largest available non-empty image (sizes are ordered small→mega)
+    }
+    return null;
   }
 
   document.getElementById('youtube-apikey').addEventListener('input', debounce(() => {
@@ -660,8 +730,8 @@
     localStorage.removeItem(LS_APIKEY);
     localStorage.removeItem(LS_LFM_USERS);
     localStorage.removeItem(LS_YT_APIKEY);
-    localStorage.removeItem(LS_YT_CACHE);
-    ytCache = {};
+    localStorage.removeItem(LS_MEDIA_CACHE);
+    mediaCache = {};
     lists = { you365: [], youAll: [], friend365: [], friendAll: [] };
     names = { you: 'You', friend: 'Friend' };
     history = [];
