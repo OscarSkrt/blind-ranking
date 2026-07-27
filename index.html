@@ -197,19 +197,24 @@
 
     <div class="game-layout">
       <div class="stage">
-        <button id="record" class="record" type="button" aria-label="Reveal this track">
-          <span class="record-groove"></span>
-          <span class="record-groove"></span>
-          <span class="record-groove"></span>
-          <span class="record-center">
-            <span id="record-hidden-text" class="record-hidden-text">?</span>
-            <span id="record-artist" class="record-artist"></span>
-            <span id="record-track" class="record-track"></span>
-          </span>
-        </button>
+        <div class="reveal-row">
+          <div class="album-art-wrap">
+            <img id="album-art" class="album-art" alt="">
+            <span id="album-art-placeholder" class="album-art-placeholder">♪</span>
+          </div>
+          <button id="record" class="record" type="button" aria-label="Reveal this track">
+            <span class="record-groove"></span>
+            <span class="record-groove"></span>
+            <span class="record-groove"></span>
+            <span class="record-center">
+              <span id="record-hidden-text" class="record-hidden-text">?</span>
+              <span id="record-artist" class="record-artist"></span>
+              <span id="record-track" class="record-track"></span>
+            </span>
+          </button>
+        </div>
         <p id="reveal-hint" class="reveal-hint">Click the record to reveal</p>
 
-        <img id="album-art" class="album-art hidden" alt="">
         <div id="yt-embed" class="yt-embed hidden"></div>
         <p id="yt-status" class="yt-status"></p>
 
