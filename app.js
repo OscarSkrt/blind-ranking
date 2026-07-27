@@ -194,6 +194,7 @@
   function getCategories() {
     const combined365 = combine(lists.you365, lists.friend365);
     const combinedAll = combine(lists.youAll, lists.friendAll);
+    const combinedEverything = combine(combined365, combinedAll);
     return [
       { id: 'you365', title: `${names.you} — Last 365 days`, tracks: lists.you365 },
       { id: 'youAll', title: `${names.you} — All-time`, tracks: lists.youAll },
@@ -203,6 +204,7 @@
       { id: 'combinedAll', title: `Combined — All-time`, tracks: combinedAll },
       { id: 'top100', title: `Top 100 — Combined all-time`, tracks: combinedAll.slice(0, 100) },
       { id: 'top1000', title: `Top 1000 — Combined all-time`, tracks: combinedAll.slice(0, 1000) },
+      { id: 'combinedEverything', title: `Combined — Everything`, tracks: combinedEverything },
     ];
   }
 
