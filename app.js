@@ -80,9 +80,20 @@
     history: document.getElementById('screen-history'),
   };
   function showScreen(name) {
+    if (name !== 'game') stopEmbeddedVideo();
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[name].classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Removing the iframe is the reliable way to stop a YouTube embed — there's no
+  // simple cross-origin "pause" without loading the full postMessage player API.
+  function stopEmbeddedVideo() {
+    const embed = document.getElementById('yt-embed');
+    if (embed) {
+      embed.innerHTML = '';
+      embed.classList.add('hidden');
+    }
   }
 
   const slots = ['you365', 'youAll', 'friend365', 'friendAll'];
