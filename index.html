@@ -140,46 +140,101 @@
       <input type="text" id="name-friend" class="inline-name" value="Friend" maxlength="16">
     </p>
 
-    <div class="screen-head" style="margin-top:3rem;">
-      <p class="eyebrow">Step 2</p>
-      <h2>Build a session</h2>
-      <p class="lede">Mix and match — any person, any time range, any chart size.</p>
+    <div class="mode-tabs" style="margin-top:3rem;">
+      <button id="tab-tracks" class="mode-tab active" type="button">🎧 Rank Tracks</button>
+      <button id="tab-albums" class="mode-tab" type="button">💿 Guess Albums</button>
     </div>
 
-    <div class="query-builder">
-      <div class="qb-row">
-        <label class="lf-field">
-          <span class="lf-label">Whose tracks</span>
-          <select id="qb-who" class="lf-input">
-            <option value="you">You</option>
-            <option value="friend">Friend</option>
-            <option value="combined">Combined</option>
-          </select>
-        </label>
-        <label class="lf-field">
-          <span class="lf-label">Time period</span>
-          <select id="qb-period" class="lf-input">
-            <option value="365">Last 365 days</option>
-            <option value="all">All-time</option>
-            <option value="everything">Everything (both periods)</option>
-          </select>
-        </label>
-        <label class="lf-field">
-          <span class="lf-label">Number of top tracks</span>
-          <select id="qb-topn" class="lf-input">
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="250">250</option>
-            <option value="500">500</option>
-            <option value="1000">1000</option>
-            <option value="all">All</option>
-          </select>
-        </label>
+    <div id="mode-panel-tracks">
+      <div class="screen-head" style="margin-top:1.5rem;">
+        <p class="eyebrow">Step 2</p>
+        <h2>Build a session</h2>
+        <p class="lede">Mix and match — any person, any time range, any chart size.</p>
       </div>
-      <button id="btn-start-session" class="primary-btn" type="button">Start session</button>
-      <p class="hint" id="qb-count"></p>
+
+      <div class="query-builder">
+        <div class="qb-row">
+          <label class="lf-field">
+            <span class="lf-label">Whose tracks</span>
+            <select id="qb-who" class="lf-input">
+              <option value="you">You</option>
+              <option value="friend">Friend</option>
+              <option value="combined">Combined</option>
+            </select>
+          </label>
+          <label class="lf-field">
+            <span class="lf-label">Time period</span>
+            <select id="qb-period" class="lf-input">
+              <option value="365">Last 365 days</option>
+              <option value="all">All-time</option>
+              <option value="everything">Everything (both periods)</option>
+            </select>
+          </label>
+          <label class="lf-field">
+            <span class="lf-label">Number of top tracks</span>
+            <select id="qb-topn" class="lf-input">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+              <option value="1000">1000</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+        </div>
+        <button id="btn-start-session" class="primary-btn" type="button">Start session</button>
+        <p class="hint" id="qb-count"></p>
+      </div>
+    </div>
+
+    <div id="mode-panel-albums" class="hidden">
+      <div class="screen-head" style="margin-top:1.5rem;">
+        <p class="eyebrow">Step 2</p>
+        <h2>Guess the album</h2>
+        <p class="lede">A random album from your library — guess its name from a pixelated cover, its release year, 5 of its songs, then put the whole tracklist in order.</p>
+      </div>
+
+      <div class="query-builder">
+        <button id="btn-fetch-albums" class="ghost-btn" type="button">Pull top albums from last.fm</button>
+        <p class="hint" id="albums-fetch-status"></p>
+
+        <div class="qb-row" style="margin-top:1.1rem;">
+          <label class="lf-field">
+            <span class="lf-label">Whose albums</span>
+            <select id="ab-who" class="lf-input">
+              <option value="you">You</option>
+              <option value="friend">Friend</option>
+              <option value="combined">Combined</option>
+            </select>
+          </label>
+          <label class="lf-field">
+            <span class="lf-label">Time period</span>
+            <select id="ab-period" class="lf-input">
+              <option value="365">Last 365 days</option>
+              <option value="all">All-time</option>
+              <option value="everything">Everything (both periods)</option>
+            </select>
+          </label>
+          <label class="lf-field">
+            <span class="lf-label">Pool size</span>
+            <select id="ab-topn" class="lf-input">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+              <option value="1000" selected>1000</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+        </div>
+        <button id="btn-start-album-game" class="primary-btn" type="button">Start album round</button>
+        <p class="hint" id="ab-count"></p>
+        <p class="lf-note">Cover art, release year, and tracklists come from Apple's free iTunes lookup (no key needed) — matched against the album name last.fm gives us, so very obscure or mistagged albums may occasionally fail to match. If one does, the game just tries another from your pool.</p>
+      </div>
     </div>
 
   </section>
@@ -253,6 +308,78 @@
     </div>
     <div id="history-list" class="history-list"></div>
     <button id="btn-history-back" class="ghost-btn" type="button">← Back</button>
+  </section>
+
+  <!-- ============ SCREEN 5: ALBUM GAME ============ -->
+  <section id="screen-album-game" class="screen">
+    <div class="game-top">
+      <button id="btn-album-end" class="ghost-btn" type="button">← End round</button>
+      <span id="album-category-label" class="category-pill"></span>
+    </div>
+
+    <div id="album-loading" class="album-loading hidden">
+      <p>Finding a playable album from your library…</p>
+    </div>
+
+    <div id="album-stage" class="album-stage hidden">
+
+      <div id="ag-stage-name" class="ag-stage">
+        <p class="ag-stage-label">Stage 1 — What album is this?</p>
+        <canvas id="ag-canvas" class="ag-canvas" width="320" height="320"></canvas>
+        <form id="ag-form-name" class="ag-form">
+          <input type="text" id="ag-input-name" class="lf-input" placeholder="Type the album name" autocomplete="off">
+          <button type="submit" class="primary-btn">Submit guess</button>
+        </form>
+        <div id="ag-feedback-name" class="ag-feedback"></div>
+      </div>
+
+      <div id="ag-stage-year" class="ag-stage hidden">
+        <p class="ag-stage-label">Stage 2 — What year was it released?</p>
+        <img id="ag-cover-reveal" class="ag-cover-reveal" alt="">
+        <p class="ag-album-name-display" id="ag-album-name-display"></p>
+        <form id="ag-form-year" class="ag-form">
+          <input type="number" id="ag-input-year" class="lf-input" placeholder="e.g. 2017" autocomplete="off">
+          <button type="submit" class="primary-btn">Submit guess</button>
+        </form>
+        <div id="ag-feedback-year" class="ag-feedback"></div>
+      </div>
+
+      <div id="ag-stage-songs" class="ag-stage hidden">
+        <p class="ag-stage-label">Stage 3 — Name 5 songs on this album</p>
+        <form id="ag-form-songs" class="ag-form ag-form-songs">
+          <input type="text" class="lf-input ag-song-input" data-idx="0" placeholder="Song 1" autocomplete="off">
+          <input type="text" class="lf-input ag-song-input" data-idx="1" placeholder="Song 2" autocomplete="off">
+          <input type="text" class="lf-input ag-song-input" data-idx="2" placeholder="Song 3" autocomplete="off">
+          <input type="text" class="lf-input ag-song-input" data-idx="3" placeholder="Song 4" autocomplete="off">
+          <input type="text" class="lf-input ag-song-input" data-idx="4" placeholder="Song 5" autocomplete="off">
+          <button type="submit" class="primary-btn">Submit guesses</button>
+        </form>
+        <div id="ag-feedback-songs" class="ag-feedback"></div>
+      </div>
+
+      <div id="ag-stage-order" class="ag-stage hidden">
+        <p class="ag-stage-label">Stage 4 — Drag into what you think is the real track order</p>
+        <ol id="ag-order-list" class="ag-order-list"></ol>
+        <button id="ag-submit-order" class="primary-btn" type="button">Lock in order</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 6: ALBUM RESULTS ============ -->
+  <section id="screen-album-results" class="screen">
+    <div class="screen-head">
+      <p class="eyebrow">Round complete</p>
+      <h1 id="ag-results-title">Results</h1>
+    </div>
+
+    <div id="ag-results-breakdown" class="ag-results-breakdown"></div>
+    <div class="ag-order-compare" id="ag-order-compare"></div>
+
+    <div class="results-actions">
+      <button id="btn-album-play-again" class="primary-btn" type="button">New album</button>
+      <button id="btn-album-back" class="ghost-btn" type="button">Back to menu</button>
+    </div>
   </section>
 
 </main>
