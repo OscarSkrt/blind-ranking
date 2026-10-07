@@ -72,12 +72,37 @@
     return dedupe([...a, ...b]);
   }
 
+  // Like combine(), but alternates a[0], b[0], a[1], b[1], ... instead of concatenating.
+  // Use this whenever merging two different PEOPLE's lists — concatenation puts one
+  // person's entire list before the other's, which starves the second person out of
+  // any "Top N" slice smaller than the first person's list length.
+  function interleaveDedupe(a, b) {
+    const seen = new Set();
+    const out = [];
+    const maxLen = Math.max(a.length, b.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < a.length) {
+        const item = a[i];
+        const key = (item.artist + '::' + item.track).toLowerCase();
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+      if (i < b.length) {
+        const item = b[i];
+        const key = (item.artist + '::' + item.track).toLowerCase();
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+    }
+    return out;
+  }
+
   /* ============ DOM refs ============ */
   const screens = {
     setup: document.getElementById('screen-setup'),
     game: document.getElementById('screen-game'),
     results: document.getElementById('screen-results'),
     history: document.getElementById('screen-history'),
+    'album-game': document.getElementById('screen-album-game'),
+    'album-results': document.getElementById('screen-album-results'),
   };
   function showScreen(name) {
     if (name !== 'game') stopEmbeddedVideo();
@@ -263,6 +288,7 @@
     document.getElementById('name-friend').value = names.friend;
     // restore paste areas if we have raw text cached? we only store parsed, so leave blank.
     renderQueryBuilder();
+    renderAlbumQueryBuilder();
   }
 
   slots.forEach(slot => {
@@ -306,6 +332,7 @@
       names.friend = document.getElementById('name-friend').value.trim() || 'Friend';
       saveJSON(LS_NAMES, names);
       renderQueryBuilder();
+      renderAlbumQueryBuilder();
     }, 300));
   });
 
@@ -313,17 +340,17 @@
     if (period === '365') {
       if (who === 'you') return lists.you365;
       if (who === 'friend') return lists.friend365;
-      return combine(lists.you365, lists.friend365);
+      return interleaveDedupe(lists.you365, lists.friend365);
     }
     if (period === 'all') {
       if (who === 'you') return lists.youAll;
       if (who === 'friend') return lists.friendAll;
-      return combine(lists.youAll, lists.friendAll);
+      return interleaveDedupe(lists.youAll, lists.friendAll);
     }
     // 'everything' — both periods merged
     if (who === 'you') return combine(lists.you365, lists.youAll);
     if (who === 'friend') return combine(lists.friend365, lists.friendAll);
-    return combine(combine(lists.you365, lists.friend365), combine(lists.youAll, lists.friendAll));
+    return interleaveDedupe(combine(lists.you365, lists.youAll), combine(lists.friend365, lists.friendAll));
   }
 
   function buildCategory(who, period, topN) {
@@ -729,13 +756,23 @@
       const div = document.createElement('div');
       div.className = 'history-item';
       const dt = new Date(entry.date);
-      div.innerHTML = `
-        <div>
-          <div class="hi-cat">${escapeHtml(entry.categoryTitle)}</div>
-          <div class="hi-meta">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${entry.filledCount}/10 filled${entry.chartFull ? '' : ' (ended early)'}</div>
-        </div>
-      `;
-      div.addEventListener('click', () => renderResults(entry));
+      if (entry.type === 'album') {
+        div.innerHTML = `
+          <div>
+            <div class="hi-cat">💿 ${escapeHtml(entry.artist)} — ${escapeHtml(entry.album)}</div>
+            <div class="hi-meta">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · Score ${entry.total} · ${escapeHtml(entry.categoryTitle)}</div>
+          </div>
+        `;
+        div.addEventListener('click', () => renderAlbumResults(entry));
+      } else {
+        div.innerHTML = `
+          <div>
+            <div class="hi-cat">${escapeHtml(entry.categoryTitle)}</div>
+            <div class="hi-meta">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} · ${entry.filledCount}/10 filled${entry.chartFull ? '' : ' (ended early)'}</div>
+          </div>
+        `;
+        div.addEventListener('click', () => renderResults(entry));
+      }
       wrap.appendChild(div);
     });
   }
@@ -750,8 +787,10 @@
     localStorage.removeItem(LS_LFM_USERS);
     localStorage.removeItem(LS_YT_APIKEY);
     localStorage.removeItem(LS_MEDIA_CACHE);
+    localStorage.removeItem(LS_ALBUM_LISTS);
     mediaCache = {};
     lists = { you365: [], youAll: [], friend365: [], friendAll: [] };
+    albumLists = { you365: [], youAll: [], friend365: [], friendAll: [] };
     names = { you: 'You', friend: 'Friend' };
     history = [];
     slots.forEach(slot => {
@@ -763,8 +802,501 @@
     document.getElementById('lastfm-you').value = '';
     document.getElementById('lastfm-friend').value = '';
     document.getElementById('youtube-apikey').value = '';
+    document.getElementById('albums-fetch-status').textContent = '';
     refreshUploadUI();
     showScreen('setup');
+  });
+
+  /* ============================================================
+     ALBUM GUESSER — second game mode
+     Data flow: last.fm (user.gettopalbums) gives the pool of album
+     names; Apple's iTunes Search API (no key needed, CORS-enabled)
+     supplies the actual cover art, release year, and tracklist for
+     whichever album gets picked, since last.fm's own album metadata
+     is unreliable for those three things.
+     ============================================================ */
+
+  /* ---------- Mode tabs ---------- */
+  document.getElementById('tab-tracks').addEventListener('click', () => switchMode('tracks'));
+  document.getElementById('tab-albums').addEventListener('click', () => switchMode('albums'));
+  function switchMode(mode) {
+    document.getElementById('tab-tracks').classList.toggle('active', mode === 'tracks');
+    document.getElementById('tab-albums').classList.toggle('active', mode === 'albums');
+    document.getElementById('mode-panel-tracks').classList.toggle('hidden', mode !== 'tracks');
+    document.getElementById('mode-panel-albums').classList.toggle('hidden', mode !== 'albums');
+  }
+
+  /* ---------- Album list storage (mirrors the track `lists` object) ---------- */
+  const LS_ALBUM_LISTS = 'blindspin.albumlists.v1';
+  let albumLists = loadJSON(LS_ALBUM_LISTS, { you365: [], youAll: [], friend365: [], friendAll: [] });
+
+  function dedupeAlbums(arr) {
+    const seen = new Set();
+    const out = [];
+    for (const item of arr) {
+      const key = (item.artist + '::' + item.album).toLowerCase();
+      if (!seen.has(key)) { seen.add(key); out.push(item); }
+    }
+    return out;
+  }
+  function combineAlbums(a, b) { return dedupeAlbums([...a, ...b]); }
+  function interleaveDedupeAlbums(a, b) {
+    const seen = new Set();
+    const out = [];
+    const maxLen = Math.max(a.length, b.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < a.length) {
+        const item = a[i];
+        const key = (item.artist + '::' + item.album).toLowerCase();
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+      if (i < b.length) {
+        const item = b[i];
+        const key = (item.artist + '::' + item.album).toLowerCase();
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+    }
+    return out;
+  }
+
+  async function fetchTopAlbums(username, period, apiKey, limit = 1000) {
+    let all = [];
+    let page = 1;
+    while (all.length < limit) {
+      const url = `https://ws.audioscrobbler.com/2.0/?method=user.gettopalbums&user=${encodeURIComponent(username)}&period=${period}&api_key=${encodeURIComponent(apiKey)}&format=json&limit=1000&page=${page}`;
+      const data = await jsonp(url);
+      if (data.error) throw new Error(data.message || `last.fm error ${data.error}`);
+      let albums = (data.topalbums && data.topalbums.album) || [];
+      if (!Array.isArray(albums)) albums = [albums];
+      if (albums.length === 0) break;
+      all.push(...albums);
+      const attr = (data.topalbums && data.topalbums['@attr']) || {};
+      const totalPages = parseInt(attr.totalPages || '1', 10);
+      if (page >= totalPages || page >= 5) break;
+      page++;
+    }
+    return all.slice(0, limit).map(a => ({
+      artist: (a.artist && (a.artist.name || a.artist['#text'])) || 'Unknown artist',
+      album: a.name,
+    }));
+  }
+
+  document.getElementById('btn-fetch-albums').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-fetch-albums');
+    const apiKey = document.getElementById('lastfm-apikey').value.trim();
+    const youUser = document.getElementById('lastfm-you').value.trim();
+    const friendUser = document.getElementById('lastfm-friend').value.trim();
+    const statusEl = document.getElementById('albums-fetch-status');
+    statusEl.style.color = '';
+
+    if (!apiKey) { statusEl.textContent = 'Add a last.fm API key first (Step 1 above).'; statusEl.style.color = 'var(--red)'; return; }
+    if (!youUser && !friendUser) { statusEl.textContent = 'Enter at least one last.fm username (Step 1 above).'; statusEl.style.color = 'var(--red)'; return; }
+
+    const jobs = [];
+    if (youUser) { jobs.push(['you365', youUser, '12month']); jobs.push(['youAll', youUser, 'overall']); }
+    if (friendUser) { jobs.push(['friend365', friendUser, '12month']); jobs.push(['friendAll', friendUser, 'overall']); }
+
+    btn.disabled = true;
+    let successCount = 0;
+    let firstError = null;
+    for (const [slot, user, period] of jobs) {
+      statusEl.textContent = `Fetching ${successCount + 1}/${jobs.length} — ${user} (${period === 'overall' ? 'all-time' : 'last 365 days'})…`;
+      try {
+        const albums = await fetchTopAlbums(user, period, apiKey, 1000);
+        if (albums.length === 0) throw new Error(`no albums found for "${user}"`);
+        albumLists[slot] = dedupeAlbums(albums);
+        successCount++;
+      } catch (e) {
+        firstError = e.message;
+      }
+    }
+    saveJSON(LS_ALBUM_LISTS, albumLists);
+    btn.disabled = false;
+    renderAlbumQueryBuilder();
+
+    if (successCount === jobs.length) {
+      statusEl.textContent = `Loaded ${successCount} album list${successCount > 1 ? 's' : ''} from last.fm.`;
+    } else if (successCount > 0) {
+      statusEl.textContent = `Loaded ${successCount}/${jobs.length} lists — ${firstError}`;
+      statusEl.style.color = 'var(--red)';
+    } else {
+      statusEl.textContent = `Couldn't load from last.fm — ${firstError}`;
+      statusEl.style.color = 'var(--red)';
+    }
+  });
+
+  function buildAlbumListFor(who, period) {
+    if (period === '365') {
+      if (who === 'you') return albumLists.you365;
+      if (who === 'friend') return albumLists.friend365;
+      return interleaveDedupeAlbums(albumLists.you365, albumLists.friend365);
+    }
+    if (period === 'all') {
+      if (who === 'you') return albumLists.youAll;
+      if (who === 'friend') return albumLists.friendAll;
+      return interleaveDedupeAlbums(albumLists.youAll, albumLists.friendAll);
+    }
+    if (who === 'you') return combineAlbums(albumLists.you365, albumLists.youAll);
+    if (who === 'friend') return combineAlbums(albumLists.friend365, albumLists.friendAll);
+    return interleaveDedupeAlbums(combineAlbums(albumLists.you365, albumLists.youAll), combineAlbums(albumLists.friend365, albumLists.friendAll));
+  }
+
+  function buildAlbumCategory(who, period, topN) {
+    const full = buildAlbumListFor(who, period);
+    const albums = topN === 'all' ? full : full.slice(0, parseInt(topN, 10));
+    const whoLabel = who === 'you' ? names.you : who === 'friend' ? names.friend : 'Combined';
+    const periodLabel = period === '365' ? 'Last 365 days' : period === 'all' ? 'All-time' : 'Everything';
+    const topLabel = topN === 'all' ? 'All albums' : `Top ${topN}`;
+    return { title: `${whoLabel} — ${periodLabel} — ${topLabel}`, albums, fullCount: full.length };
+  }
+
+  function renderAlbumQueryBuilder() {
+    const whoSelect = document.getElementById('ab-who');
+    whoSelect.options[0].textContent = names.you;
+    whoSelect.options[1].textContent = names.friend;
+
+    const who = whoSelect.value;
+    const period = document.getElementById('ab-period').value;
+    const topN = document.getElementById('ab-topn').value;
+    const cat = buildAlbumCategory(who, period, topN);
+    const countEl = document.getElementById('ab-count');
+    const startBtn = document.getElementById('btn-start-album-game');
+
+    if (cat.fullCount === 0) {
+      countEl.textContent = 'No albums loaded for this selection yet — pull albums above first.';
+      startBtn.disabled = true;
+    } else {
+      countEl.textContent = `${cat.albums.length} of ${cat.fullCount} available albums in the pool.`;
+      startBtn.disabled = false;
+    }
+  }
+
+  ['ab-who', 'ab-period', 'ab-topn'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderAlbumQueryBuilder);
+  });
+
+  document.getElementById('btn-start-album-game').addEventListener('click', () => {
+    const who = document.getElementById('ab-who').value;
+    const period = document.getElementById('ab-period').value;
+    const topN = document.getElementById('ab-topn').value;
+    const cat = buildAlbumCategory(who, period, topN);
+    if (cat.albums.length === 0) return;
+    startAlbumRound(cat.albums, cat.title);
+  });
+
+  /* ---------- Text normalization for answer matching ---------- */
+  function normalizeText(s) {
+    return (s || '')
+      .toLowerCase()
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '') // strip accents
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* ---------- iTunes lookup: cover art, release year, tracklist ---------- */
+  async function lookupAlbumOnItunes(artist, album) {
+    const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artist + ' ' + album)}&entity=album&limit=5`;
+    const res = await fetch(searchUrl);
+    const data = await res.json();
+    const results = data.results || [];
+    if (results.length === 0) return null;
+
+    const normAlbum = normalizeText(album);
+    const match = results.find(r => normalizeText(r.collectionName) === normAlbum) || results[0];
+    if (!match || !match.collectionId) return null;
+
+    const art = match.artworkUrl100 ? match.artworkUrl100.replace('100x100bb', '600x600bb') : null;
+    const year = match.releaseDate ? new Date(match.releaseDate).getUTCFullYear() : null;
+
+    const lookupUrl = `https://itunes.apple.com/lookup?id=${match.collectionId}&entity=song`;
+    const res2 = await fetch(lookupUrl);
+    const data2 = await res2.json();
+    const tracks = (data2.results || [])
+      .filter(r => r.wrapperType === 'track' && r.trackName)
+      .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
+      .map(r => r.trackName);
+    if (tracks.length === 0) return null;
+
+    return { collectionName: match.collectionName, artistName: match.artistName, art, year, tracks };
+  }
+
+  async function pickPlayableAlbum(pool) {
+    const shuffled = shuffle(pool);
+    const tries = Math.min(shuffled.length, 8);
+    for (let i = 0; i < tries; i++) {
+      const candidate = shuffled[i];
+      try {
+        const info = await lookupAlbumOnItunes(candidate.artist, candidate.album);
+        if (info && info.tracks.length >= 5) {
+          return { artist: info.artistName || candidate.artist, album: info.collectionName || candidate.album, art: info.art, year: info.year, tracks: info.tracks };
+        }
+      } catch (e) {
+        // try the next candidate
+      }
+    }
+    return null;
+  }
+
+  /* ---------- Pixelated cover reveal ---------- */
+  function drawPixelatedCover(url) {
+    const canvas = document.getElementById('ag-canvas');
+    const ctx = canvas.getContext('2d');
+    const PIXEL_SIZE = 12; // lower = more pixelated
+
+    function drawFallback(msg) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#262832';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#8b8d97';
+      ctx.font = '16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(msg, canvas.width / 2, canvas.height / 2);
+    }
+
+    if (!url) { drawFallback('no cover found'); return; }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const off = document.createElement('canvas');
+      off.width = PIXEL_SIZE;
+      off.height = PIXEL_SIZE;
+      const offCtx = off.getContext('2d');
+      offCtx.drawImage(img, 0, 0, PIXEL_SIZE, PIXEL_SIZE);
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(off, 0, 0, PIXEL_SIZE, PIXEL_SIZE, 0, 0, canvas.width, canvas.height);
+    };
+    img.onerror = () => drawFallback('cover failed to load');
+    img.src = url;
+  }
+
+  /* ---------- Round state & flow ---------- */
+  let albumGame = null; // { pool, categoryTitle, current: {artist, album, art, year, tracks}, scores }
+  let orderList = []; // working drag-to-reorder state for the current round
+
+  function showAlbumStage(stage) {
+    ['name', 'year', 'songs', 'order'].forEach(s => {
+      document.getElementById('ag-stage-' + s).classList.toggle('hidden', s !== stage);
+    });
+  }
+
+  function resetAlbumForms() {
+    const nameInput = document.getElementById('ag-input-name');
+    nameInput.value = ''; nameInput.disabled = false;
+    document.querySelector('#ag-form-name button').disabled = false;
+    document.getElementById('ag-feedback-name').textContent = '';
+    document.getElementById('ag-feedback-name').className = 'ag-feedback';
+
+    const yearInput = document.getElementById('ag-input-year');
+    yearInput.value = ''; yearInput.disabled = false;
+    document.querySelector('#ag-form-year button').disabled = false;
+    document.getElementById('ag-feedback-year').textContent = '';
+    document.getElementById('ag-feedback-year').className = 'ag-feedback';
+    document.getElementById('ag-cover-reveal').src = '';
+    document.getElementById('ag-album-name-display').textContent = '';
+
+    document.querySelectorAll('.ag-song-input').forEach(inp => { inp.value = ''; inp.disabled = false; });
+    document.querySelector('#ag-form-songs button').disabled = false;
+    document.getElementById('ag-feedback-songs').innerHTML = '';
+  }
+
+  async function startAlbumRound(pool, categoryTitle) {
+    albumGame = { pool, categoryTitle };
+    showScreen('album-game');
+    document.getElementById('album-category-label').textContent = categoryTitle;
+    document.getElementById('album-loading').classList.remove('hidden');
+    document.getElementById('album-stage').classList.add('hidden');
+
+    const picked = await pickPlayableAlbum(pool);
+
+    document.getElementById('album-loading').classList.add('hidden');
+    if (!picked) {
+      alert("Couldn't find enough info (cover art + at least 5 tracks) for albums in this pool after several tries. Try a different selection.");
+      showScreen('setup');
+      return;
+    }
+
+    albumGame.current = picked;
+    albumGame.scores = { albumCorrect: false, yearCorrect: false, songsCorrect: 0, orderCorrect: 0, totalTracks: picked.tracks.length };
+
+    resetAlbumForms();
+    document.getElementById('album-stage').classList.remove('hidden');
+    showAlbumStage('name');
+    drawPixelatedCover(picked.art);
+  }
+
+  document.getElementById('ag-form-name').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const guess = document.getElementById('ag-input-name').value.trim();
+    const correct = guess.length > 0 && normalizeText(guess) === normalizeText(albumGame.current.album);
+    albumGame.scores.albumCorrect = correct;
+
+    const fb = document.getElementById('ag-feedback-name');
+    fb.textContent = correct ? '✅ Correct!' : `❌ It was "${albumGame.current.album}" by ${albumGame.current.artist}`;
+    fb.className = 'ag-feedback ' + (correct ? 'correct' : 'incorrect');
+    document.getElementById('ag-input-name').disabled = true;
+    document.querySelector('#ag-form-name button').disabled = true;
+
+    setTimeout(() => {
+      const img = document.getElementById('ag-cover-reveal');
+      img.src = albumGame.current.art || '';
+      document.getElementById('ag-album-name-display').textContent = `${albumGame.current.album} — ${albumGame.current.artist}`;
+      showAlbumStage('year');
+    }, 1600);
+  });
+
+  document.getElementById('ag-form-year').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const guess = parseInt(document.getElementById('ag-input-year').value, 10);
+    const hasYear = albumGame.current.year != null;
+    const correct = hasYear && guess === albumGame.current.year;
+    albumGame.scores.yearCorrect = correct;
+
+    const fb = document.getElementById('ag-feedback-year');
+    if (!hasYear) {
+      fb.textContent = 'No release year on file for this one — skipped.';
+      fb.className = 'ag-feedback';
+    } else {
+      fb.textContent = correct ? '✅ Correct!' : `❌ It was ${albumGame.current.year}`;
+      fb.className = 'ag-feedback ' + (correct ? 'correct' : 'incorrect');
+    }
+    document.getElementById('ag-input-year').disabled = true;
+    document.querySelector('#ag-form-year button').disabled = true;
+
+    setTimeout(() => showAlbumStage('songs'), 1600);
+  });
+
+  document.getElementById('ag-form-songs').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inputs = Array.from(document.querySelectorAll('.ag-song-input'));
+    const tracks = albumGame.current.tracks;
+    const matchedIdx = new Set();
+    let correctCount = 0;
+
+    inputs.forEach(inp => {
+      const val = inp.value.trim();
+      if (!val) return;
+      const normVal = normalizeText(val);
+      let foundIdx = -1;
+      tracks.forEach((t, idx) => {
+        if (foundIdx !== -1 || matchedIdx.has(idx)) return;
+        const normTrack = normalizeText(t);
+        if (normTrack === normVal || (normVal.length >= 3 && (normTrack.includes(normVal) || normVal.includes(normTrack)))) {
+          foundIdx = idx;
+        }
+      });
+      if (foundIdx !== -1) { matchedIdx.add(foundIdx); correctCount++; }
+    });
+
+    albumGame.scores.songsCorrect = correctCount;
+    document.getElementById('ag-feedback-songs').innerHTML = `You got ${correctCount}/5.`;
+    inputs.forEach(inp => inp.disabled = true);
+    document.querySelector('#ag-form-songs button').disabled = true;
+
+    setTimeout(() => {
+      buildOrderStage();
+      showAlbumStage('order');
+    }, 1800);
+  });
+
+  function buildOrderStage() {
+    orderList = shuffle(albumGame.current.tracks.map((t, i) => ({ name: t, correctIndex: i })));
+    renderOrderList();
+  }
+
+  let dragSrcIdx = null;
+  function renderOrderList() {
+    const ol = document.getElementById('ag-order-list');
+    ol.innerHTML = '';
+    orderList.forEach((item, idx) => {
+      const li = document.createElement('li');
+      li.className = 'ag-order-item';
+      li.draggable = true;
+      li.dataset.idx = idx;
+      li.innerHTML = `<span class="ag-order-num">${idx + 1}</span><span class="ag-order-name">${escapeHtml(item.name)}</span>`;
+      li.addEventListener('dragstart', (e) => {
+        dragSrcIdx = idx;
+        li.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      li.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+      li.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetIdx = parseInt(li.dataset.idx, 10);
+        if (dragSrcIdx === null || dragSrcIdx === targetIdx) return;
+        const [moved] = orderList.splice(dragSrcIdx, 1);
+        orderList.splice(targetIdx, 0, moved);
+        renderOrderList();
+      });
+      li.addEventListener('dragend', () => { li.classList.remove('dragging'); dragSrcIdx = null; });
+      ol.appendChild(li);
+    });
+  }
+
+  document.getElementById('ag-submit-order').addEventListener('click', () => {
+    let correctPositions = 0;
+    orderList.forEach((item, idx) => { if (item.correctIndex === idx) correctPositions++; });
+    albumGame.scores.orderCorrect = correctPositions;
+    finishAlbumRound();
+  });
+
+  function finishAlbumRound() {
+    const s = albumGame.scores;
+    const total = (s.albumCorrect ? 3 : 0) + (s.yearCorrect ? 1 : 0) + s.songsCorrect + s.orderCorrect;
+    const entry = {
+      type: 'album',
+      date: new Date().toISOString(),
+      categoryTitle: albumGame.categoryTitle,
+      album: albumGame.current.album,
+      artist: albumGame.current.artist,
+      scores: s,
+      total,
+      tracks: albumGame.current.tracks,       // correct order
+      yourOrder: orderList.map(i => i.name),  // the order the player chose
+    };
+    history.unshift(entry);
+    saveJSON(LS_HISTORY, history);
+    renderAlbumResults(entry);
+  }
+
+  function renderAlbumResults(entry) {
+    document.getElementById('ag-results-title').textContent = `${entry.artist} — ${entry.album}`;
+    const s = entry.scores;
+    document.getElementById('ag-results-breakdown').innerHTML = `
+      <div class="ag-score-row"><span>Album name</span><span>${s.albumCorrect ? '✅ +3' : '❌ 0'}</span></div>
+      <div class="ag-score-row"><span>Release year</span><span>${s.yearCorrect ? '✅ +1' : '❌ 0'}</span></div>
+      <div class="ag-score-row"><span>Songs guessed</span><span>${s.songsCorrect}/5</span></div>
+      <div class="ag-score-row"><span>Track order</span><span>${s.orderCorrect}/${s.totalTracks} in exact position</span></div>
+      <div class="ag-score-row total"><span>Total score</span><span>${entry.total}</span></div>
+    `;
+
+    const compare = document.getElementById('ag-order-compare');
+    compare.innerHTML = '<p class="ag-compare-head">Your order vs. actual order</p>';
+    const list = document.createElement('div');
+    list.className = 'ag-compare-list';
+    entry.yourOrder.forEach((name, idx) => {
+      const isCorrect = entry.tracks[idx] === name;
+      const row = document.createElement('div');
+      row.className = 'ag-compare-row' + (isCorrect ? ' correct' : '');
+      row.innerHTML = `<span class="ag-compare-pos">${idx + 1}</span><span class="ag-compare-yours">${escapeHtml(name)}</span><span class="ag-compare-actual">${isCorrect ? '✓' : escapeHtml(entry.tracks[idx])}</span>`;
+      list.appendChild(row);
+    });
+    compare.appendChild(list);
+    showScreen('album-results');
+  }
+
+  document.getElementById('btn-album-play-again').addEventListener('click', () => {
+    if (albumGame && albumGame.pool) {
+      startAlbumRound(albumGame.pool, albumGame.categoryTitle);
+    } else {
+      showScreen('setup'); // reached via history with no live pool in memory
+    }
+  });
+  document.getElementById('btn-album-back').addEventListener('click', () => showScreen('setup'));
+  document.getElementById('btn-album-end').addEventListener('click', () => {
+    if (confirm('End this round early? No score will be recorded.')) showScreen('setup');
   });
 
   /* ============ Init ============ */
