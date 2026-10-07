@@ -1021,16 +1021,81 @@
     return { collectionName: match.collectionName, artistName: match.artistName, art, year, tracks };
   }
 
+  // last.fm's album.getInfo gives a reliable tracklist (and sometimes art), using the same
+  // key already on the page. Its art and release-date fields are the unreliable part.
+  async function fetchAlbumInfoFromLastfm(artist, album, apiKey) {
+    const url = `https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=${encodeURIComponent(apiKey)}&artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}&format=json`;
+    const data = await jsonp(url);
+    if (data.error) throw new Error(data.message || `last.fm error ${data.error}`);
+    const albumData = data.album;
+    if (!albumData) return null;
+
+    let trackNodes = (albumData.tracks && albumData.tracks.track) || [];
+    if (!Array.isArray(trackNodes)) trackNodes = [trackNodes];
+    const tracks = trackNodes
+      .slice()
+      .sort((a, b) => (parseInt(a['@attr'] && a['@attr'].rank, 10) || 0) - (parseInt(b['@attr'] && b['@attr'].rank, 10) || 0))
+      .map(t => t.name)
+      .filter(Boolean);
+
+    let art = null;
+    const images = albumData.image;
+    if (Array.isArray(images)) {
+      for (let i = images.length - 1; i >= 0; i--) {
+        const u = images[i] && images[i]['#text'];
+        if (u) { art = u; break; }
+      }
+    }
+
+    return { tracks, art, artistName: albumData.artist || artist, albumName: albumData.name || album };
+  }
+
+  // Prefers last.fm for the tracklist; falls back to (or supplements with) iTunes for
+  // whatever last.fm doesn't have — usually art and/or release year.
+  async function lookupAlbumInfo(artist, album, lastfmKey) {
+    let tracks = null, art = null, year = null, artistName = artist, albumName = album;
+
+    if (lastfmKey) {
+      try {
+        const lfm = await fetchAlbumInfoFromLastfm(artist, album, lastfmKey);
+        if (lfm) {
+          if (lfm.tracks.length >= 5) tracks = lfm.tracks;
+          if (lfm.art) art = lfm.art;
+          if (lfm.artistName) artistName = lfm.artistName;
+          if (lfm.albumName) albumName = lfm.albumName;
+        }
+      } catch (e) {
+        // fall through to iTunes
+      }
+    }
+
+    if (!tracks || !art || year == null) {
+      try {
+        const itunes = await lookupAlbumOnItunes(artist, album);
+        if (itunes) {
+          if (!tracks && itunes.tracks.length >= 5) tracks = itunes.tracks;
+          if (!art && itunes.art) art = itunes.art;
+          year = itunes.year;
+          if (!tracks) { artistName = itunes.artistName || artistName; albumName = itunes.collectionName || albumName; }
+        }
+      } catch (e) {
+        // no iTunes match either — work with whatever last.fm gave us, if enough
+      }
+    }
+
+    if (!tracks || tracks.length < 5) return null;
+    return { artist: artistName, album: albumName, art, year, tracks };
+  }
+
   async function pickPlayableAlbum(pool) {
     const shuffled = shuffle(pool);
     const tries = Math.min(shuffled.length, 8);
+    const lastfmKey = document.getElementById('lastfm-apikey').value.trim();
     for (let i = 0; i < tries; i++) {
       const candidate = shuffled[i];
       try {
-        const info = await lookupAlbumOnItunes(candidate.artist, candidate.album);
-        if (info && info.tracks.length >= 5) {
-          return { artist: info.artistName || candidate.artist, album: info.collectionName || candidate.album, art: info.art, year: info.year, tracks: info.tracks };
-        }
+        const info = await lookupAlbumInfo(candidate.artist, candidate.album, lastfmKey);
+        if (info) return info;
       } catch (e) {
         // try the next candidate
       }
