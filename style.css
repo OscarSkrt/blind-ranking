@@ -192,6 +192,82 @@ code{
 .lf-get-key:hover{text-decoration:underline;}
 .lf-note{color:var(--muted); font-size:.72rem; line-height:1.5; margin:.9rem 0 0;}
 
+/* ===== Mode tabs ===== */
+.mode-tabs{display:flex; gap:.6rem; border-bottom:1px solid var(--border); padding-bottom:0;}
+.mode-tab{
+  background:transparent; border:none; border-bottom:2px solid transparent;
+  color:var(--muted); font-family:var(--font-display); font-weight:700; font-size:.95rem;
+  padding:.6rem .2rem; cursor:pointer; margin-bottom:-1px;
+}
+.mode-tab:hover{color:var(--text);}
+.mode-tab.active{color:var(--gold); border-bottom-color:var(--gold);}
+#mode-panel-albums.hidden, #mode-panel-tracks.hidden{display:none;}
+
+/* ===== Album game ===== */
+.album-loading{text-align:center; color:var(--muted); padding:3rem 0; font-size:.9rem;}
+.album-loading.hidden{display:none;}
+.album-stage.hidden{display:none;}
+.ag-stage{max-width:420px; margin:1.5rem auto 0; text-align:center;}
+.ag-stage.hidden{display:none;}
+.ag-stage-label{font-family:var(--font-display); font-weight:700; font-size:1.1rem; margin-bottom:1.25rem;}
+
+.ag-canvas{
+  width:260px; height:260px;
+  border-radius:8px; border:1px solid var(--border);
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  background:var(--surface-hi);
+  margin:0 auto;
+  display:block;
+}
+.ag-cover-reveal{
+  width:220px; height:220px; object-fit:cover;
+  border-radius:8px; border:1px solid var(--border);
+  margin:0 auto; display:block;
+  box-shadow:0 12px 28px rgba(0,0,0,0.35);
+}
+.ag-album-name-display{font-family:var(--font-display); font-weight:700; margin-top:.9rem; font-size:1.05rem;}
+
+.ag-form{display:flex; flex-direction:column; gap:.7rem; margin-top:1.5rem;}
+.ag-form-songs{gap:.55rem;}
+.ag-form input[disabled]{opacity:.55;}
+
+.ag-feedback{margin-top:1rem; font-size:.9rem; min-height:1.3em;}
+.ag-feedback.correct{color:var(--green);}
+.ag-feedback.incorrect{color:var(--red);}
+
+.ag-order-list{list-style:none; margin:0; padding:0; max-width:460px; margin:0 auto; display:flex; flex-direction:column; gap:.4rem;}
+.ag-order-item{
+  display:flex; align-items:center; gap:.8rem;
+  background:var(--surface); border:1px solid var(--border); border-radius:7px;
+  padding:.6rem .9rem; cursor:grab; user-select:none;
+}
+.ag-order-item.dragging{opacity:.4; border-style:dashed; border-color:var(--gold);}
+.ag-order-num{font-family:var(--font-display); font-weight:700; color:var(--gold); min-width:1.4rem; text-align:center;}
+.ag-order-name{font-size:.85rem; text-align:left; flex:1;}
+
+#ag-submit-order{margin-top:1.25rem;}
+
+.ag-results-breakdown{max-width:420px; margin:1.5rem auto 0;}
+.ag-score-row{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:.6rem 0; border-bottom:1px solid var(--border); font-size:.9rem;
+}
+.ag-score-row.total{font-family:var(--font-display); font-weight:700; font-size:1.05rem; color:var(--gold); border-bottom:none; padding-top:.9rem;}
+
+.ag-order-compare{max-width:460px; margin:2rem auto 0;}
+.ag-compare-head{font-family:var(--font-display); font-weight:700; margin-bottom:.8rem; text-align:center;}
+.ag-compare-list{display:flex; flex-direction:column; gap:.3rem;}
+.ag-compare-row{
+  display:grid; grid-template-columns:1.5rem 1fr 1fr; gap:.6rem; align-items:center;
+  background:var(--surface); border:1px solid var(--border); border-radius:6px;
+  padding:.5rem .8rem; font-size:.78rem;
+}
+.ag-compare-row.correct{border-color:var(--green); background:rgba(111,169,111,0.08);}
+.ag-compare-pos{font-family:var(--font-display); font-weight:700; color:var(--muted);}
+.ag-compare-yours{text-align:left;}
+.ag-compare-actual{text-align:left; color:var(--muted);}
+.ag-compare-row.correct .ag-compare-actual{color:var(--green);}
+
 /* ===== Advanced / details ===== */
 .advanced{margin-top:1.75rem; border-top:1px solid var(--border); padding-top:1rem;}
 .advanced summary{cursor:pointer; color:var(--muted); font-size:.82rem; letter-spacing:.03em;}
@@ -268,6 +344,7 @@ select.lf-input:focus{outline:none; border-color:var(--gold);}
 .record{
   --size: 320px;
   width:var(--size); height:var(--size);
+  flex-shrink:0;
   border-radius:50%;
   background:radial-gradient(circle at 50% 50%, #0d0e11 0%, #0d0e11 8%, #17181d 9%, #17181d 30%, #0d0e11 31%, #0d0e11 52%, #17181d 53%, #17181d 74%, #0d0e11 75%);
   border:1px solid var(--border);
